@@ -32,7 +32,10 @@
             :class="{ selected: aid == item.Archive.aid }"
             @click="selectMedia(item)"
           >
-            <img :src="item.Archive.cover" referrerpolicy="no-referrer" class="cover" />
+            <div class="cover-wrapper">
+              <img :src="item.Archive.cover" referrerpolicy="no-referrer" class="cover" />
+              <span v-if="getPartCount(item) !== undefined" class="part-count">{{ getPartCount(item) }}P</span>
+            </div>
             <div class="title">{{ item.Archive.title }}</div>
           </div>
         </div>
@@ -67,6 +70,8 @@ const list = ref<
       cover: string;
       [key: string]: any;
     };
+    /** 分P数量，异步获取 */
+    partCount?: number;
     [key: string]: any;
   }[]
 >([]);
@@ -117,8 +122,25 @@ const confirm = async () => {
   showModal.value = false;
 };
 
-const selectMedia = (item) => {
+const selectMedia = async (item) => {
   aid.value = String(item.Archive.aid);
+
+  // 选中时才请求分P数
+  const uid = appConfig.value.uid;
+  if (!uid) return;
+  try {
+    const detail = await biliApi.getArchiveDetail(item.Archive.bvid, uid);
+    item.partCount = detail.View?.pages?.length ?? 1;
+  } catch {
+    item.partCount = 1;
+  }
+};
+
+/**
+ * 获取稿件分P数（仅选中后有值）
+ */
+const getPartCount = (item: any): number | undefined => {
+  return item.partCount;
 };
 </script>
 
@@ -146,9 +168,26 @@ const selectMedia = (item) => {
     border-radius: 5px;
 
     width: 160px;
+    .cover-wrapper {
+      position: relative;
+      width: 160px;
+      height: 100px;
+    }
     .cover {
       width: 160px;
       height: 100px;
+      object-fit: cover;
+    }
+    .part-count {
+      position: absolute;
+      right: 4px;
+      bottom: 4px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      font-size: 12px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      line-height: 1.4;
     }
     &.selected {
       border-color: var(--color-primary-active);
