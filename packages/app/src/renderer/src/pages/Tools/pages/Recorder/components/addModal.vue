@@ -47,6 +47,15 @@
             >
             </n-input>
           </n-form-item>
+          <n-form-item v-if="config.providerId === 'XHS'">
+            <template #label>
+              <Tip
+                text="小红书号"
+                tip="如果需要使用cookie，那么这个选项必须填写，否则无法使用cookie"
+              ></Tip>
+            </template>
+            <n-input v-model:value.trim="xhsRedId" placeholder="请输入小红书号（可选）" />
+          </n-form-item>
           <n-form-item :disabled="isEdit">
             <template #label>
               <span class="inline-flex"> 备注 </span>
@@ -338,6 +347,19 @@
                 :disabled="globalFieldsObj.codecName"
               />
               <n-checkbox v-model:checked="globalFieldsObj.codecName" class="global-checkbox"
+                >全局</n-checkbox
+              >
+            </n-form-item>
+            <n-form-item>
+              <template #label>
+                <Tip :text="textInfo.douyu.cookie.text" :tip="textInfo.douyu.cookie.tip"></Tip>
+              </template>
+              <n-input
+                v-model:value="config.cookie"
+                type="password"
+                :disabled="globalFieldsObj.cookie"
+              />
+              <n-checkbox v-model:checked="globalFieldsObj.cookie" class="global-checkbox"
                 >全局</n-checkbox
               >
             </n-form-item>
@@ -880,6 +902,13 @@ const globalFieldsObj = ref<Record<NonNullable<Recorder["noGlobalFollowFields"]>
 
 const recordConfig = cloneDeep(defaultRecordConfig);
 const config = ref(recordConfig);
+const xhsRedId = computed({
+  get: () => String(config.value.uid ?? "").split("-")[1] ?? "",
+  set: (value: string) => {
+    const roomId = String(config.value.uid ?? "").split("-")[0];
+    config.value.uid = `${roomId}-${value}`;
+  },
+});
 
 const confirmDialog = useConfirm();
 const confirm = async () => {
@@ -897,6 +926,16 @@ const confirm = async () => {
       content: `B站录制高清画质需要设置账号，你可能尚未设置，尽可能使用使用小号，使用此功能默认需要你为可能的风控负责，是否继续？`,
       showCheckbox: true,
       showAgainKey: "recorder-bili-account",
+    });
+    if (!status) return;
+  }
+
+  if (config.value.providerId === "DouYu" && !config.value.cookie) {
+    const [status] = await confirmDialog.warning({
+      title: "确认添加",
+      content: `斗鱼录制高清画质需要设置Cookie，未设置Cookie也会导致流过期时间为五分钟，你可能尚未设置，尽可能使用使用小号，使用此功能默认需要你为可能的风控负责，是否继续？`,
+      showCheckbox: true,
+      showAgainKey: "recorder-douyu-account",
     });
     if (!status) return;
   }
@@ -1089,7 +1128,9 @@ watch(
       config.value.recorderType = appConfig.value.recorder.recorderType;
     }
     if (val.cookie) {
-      if (config.value.providerId === "DouYin") {
+      if (config.value.providerId === "DouYu") {
+        config.value.cookie = appConfig.value.recorder.douyu.cookie;
+      } else if (config.value.providerId === "DouYin") {
         config.value.cookie = appConfig.value.recorder.douyin.cookie;
       } else if (config.value.providerId === "XHS") {
         config.value.cookie = appConfig.value.recorder.xhs.cookie;
