@@ -218,6 +218,9 @@ export default class RecorderConfig {
       saveCover: getValue("saveCover") ?? false,
       convert2Mp4: getValue("convert2Mp4") ?? false,
       segment: getValue("segment") ?? 90,
+      // 抖音单场录制时长上限（小时）。该字段在 noGlobalFollowFields 中，
+      // 因此 getValue 会返回本房间自己的值；未配置时兜底为 0（不限制）。
+      douyinMaxRecordHours: getValue("douyinMaxRecordHours") ?? 0,
       uid: uid,
       qualityRetry: getValue("qualityRetry") ?? 0,
       videoFormat: getValue("videoFormat") ?? "auto",
