@@ -34,6 +34,12 @@ export interface RecorderCreateOpts<E extends AnyObject = UnknownObject> {
   source?: string;
   // 该项为用户配置，指定录制的片段时长，单位为秒，如果设置了此项，将按此时长切片录制
   segment?: string;
+  /**
+   * 抖音单场录制时长上限，单位小时，支持小数（如 1.5）。
+   * 小于等于 0 或留空表示不限制。
+   * 录满后本场不再录制，下场直播重新计算。当前仅抖音平台生效。
+   */
+  douyinMaxRecordHours?: number;
   // 保存礼物弹幕
   saveGiftDanma?: boolean;
   // 保存高能弹幕
