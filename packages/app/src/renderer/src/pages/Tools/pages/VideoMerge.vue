@@ -30,9 +30,12 @@
           style="flex: 1; min-width: 240px"
           clearable
         />
+        <n-checkbox v-model:checked="removeOrigin">
+          合并成功后移除源文件
+        </n-checkbox>
         <n-button type="primary" :loading="scanning" @click="scan">扫描文件</n-button>
         <Tip
-          tip="按「前缀_日期」将录制文件自动分组（同一人同一天为一组），组内无损合并为 {分组名}.ts。使用 -c copy 无损合并，不含修复时间戳跳变功能。"
+          tip="按「前缀_日期」将录制文件自动分组（同一人同一天为一组），组内无损合并为 {分组名}.ts；单个文件的分组将直接移动到输出目录并按合并后名称重命名。使用 -c copy 无损合并，不含修复时间戳跳变功能。"
           :size="26"
         ></Tip>
       </div>
@@ -100,6 +103,7 @@ const confirm = useConfirm();
 const inputDir = ref("");
 const outputDir = ref("");
 const autoPrefix = ref("");
+const removeOrigin = ref(false);
 const scanning = ref(false);
 const groups = ref<VideoGroup[]>([]);
 const checkedRowNames = ref<string[]>([]);
@@ -117,7 +121,7 @@ const buttonGroupOptions = computed(() => {
   ];
 });
 
-const selectableGroups = computed(() => groups.value.filter((g) => g.count >= 2));
+const selectableGroups = computed(() => groups.value.filter((g) => !g.isFinished));
 
 const selectedGroups = computed(() => {
   return selectableGroups.value.filter((g) => checkedRowNames.value.includes(g.name));
@@ -135,18 +139,32 @@ const formatSize = (bytes: number): string => {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 };
 
+/** 分组显示名：以合并后的文件名为准（含补前缀预览） */
+const outputDisplayName = (row: VideoGroup): string => {
+  const prefix = autoPrefix.value.trim();
+  if (!prefix) return row.outputName;
+  const full = prefix.endsWith("：") || prefix.endsWith(":") ? prefix : `${prefix}：`;
+  return `${full}${row.outputName}`;
+};
+
 const columns = computed(() => {
   return [
     {
       type: "selection" as const,
-      disabled: (row: VideoGroup) => row.count < 2,
+      disabled: (row: VideoGroup) => row.isFinished,
     },
     {
-      title: "分组（前缀_日期）",
+      title: "合并后名称（前缀_日期）",
       key: "name",
       render(row: VideoGroup) {
+        const displayName = outputDisplayName(row);
+        const differs = displayName !== row.name;
         return h("div", { style: "display:flex;align-items:center;gap:6px" }, [
-          h("span", {}, row.name),
+          h(
+            "span",
+            { title: differs ? `原始分组名：${row.name}` : undefined },
+            displayName,
+          ),
           row.isFinished
             ? h(
                 NTag,
@@ -154,11 +172,11 @@ const columns = computed(() => {
                 { default: () => "成品" },
               )
             : null,
-          row.count < 2
+          row.count === 1 && !row.isFinished
             ? h(
                 NTag,
-                { size: "small", type: "warning", bordered: false },
-                { default: () => "文件数不足" },
+                { size: "small", type: "success", bordered: false },
+                { default: () => "单文件·重命名" },
               )
             : null,
         ]);
@@ -265,9 +283,10 @@ const handleMerge = async () => {
     return;
   }
 
-  // 合并前一致性检查（编码/分辨率/采样率），只提示不阻断
+  // 合并前一致性检查（编码/分辨率/采样率），只提示不阻断；单文件分组跳过检查（直接重命名移动）
   const problemLines: string[] = [];
   for (const group of selected) {
+    if (group.count < 2) continue;
     try {
       const result = await taskApi.checkMergeVideos(group.files.map((f) => f.path));
       const issues = [...result.errors, ...result.warnings];
@@ -292,12 +311,15 @@ const handleMerge = async () => {
       groups: selected.map((g) => ({ name: g.name, files: g.files.map((f) => f.path) })),
       outputDir: realOutputDir,
       autoPrefix: autoPrefix.value.trim(),
+      removeOrigin: removeOrigin.value,
     });
     const failed = res.results.filter((r) => r.error);
     const success = res.results.length - failed.length;
     if (success > 0) {
       notice.success({
-        title: `已提交 ${success} 个合并任务，可在任务队列中查看进度`,
+        title: removeOrigin.value
+          ? `已提交 ${success} 个任务（合并成功后源文件将进回收站）`
+          : `已提交 ${success} 个任务，可在任务队列中查看进度`,
         duration: 2000,
       });
     }

@@ -264,13 +264,16 @@ router.post("/scanVideoGroups", async (ctx) => {
 
 /**
  * 分组批量合并：每个分组提交为一个合并任务（-c copy 无损，无重编码）
+ * - 多文件分组：concat 合并，可选合并成功后移除源文件（removeOrigin，进回收站）
+ * - 单文件分组：直接移动到输出目录并按合并名重命名（保留原扩展名）
  * 一致性检查由前端在提交前调用 /task/checkMergeVideos 完成并提示，此处不阻断
  */
 router.post("/mergeVideoGroups", async (ctx) => {
-  const { groups, outputDir, autoPrefix } = ctx.request.body as {
+  const { groups, outputDir, autoPrefix, removeOrigin } = ctx.request.body as {
     groups: { name: string; files: string[] }[];
     outputDir?: string;
     autoPrefix?: string;
+    removeOrigin?: boolean;
   };
   if (!groups || !Array.isArray(groups) || groups.length === 0) {
     ctx.status = 400;
@@ -282,8 +285,8 @@ router.post("/mergeVideoGroups", async (ctx) => {
   for (const group of groups) {
     const { name, files } = group;
     try {
-      if (!files || files.length < 2) {
-        throw new Error("文件数不足，至少需要2个文件");
+      if (!files || files.length === 0) {
+        throw new Error("分组内没有文件");
       }
       for (const file of files) {
         if (!(await fs.pathExists(file))) {
@@ -291,12 +294,28 @@ router.post("/mergeVideoGroups", async (ctx) => {
         }
       }
       const base = buildOutputBase(name, autoPrefix || "");
+
+      if (files.length === 1) {
+        // 单文件分组：移动到输出目录并重命名（保留原扩展名，不做转码）
+        const srcFile = files[0];
+        const ext = path.extname(srcFile) || ".ts";
+        const targetDir = outputDir || path.dirname(srcFile);
+        let output = path.join(targetDir, `${base}${ext}`);
+        output = await getUnusedFileName(output);
+        if (path.resolve(output) !== path.resolve(srcFile)) {
+          await fs.move(srcFile, output, { overwrite: false });
+          log.info("mergeVideoGroups, single file moved", srcFile, "->", output);
+        }
+        results.push({ name, output });
+        continue;
+      }
+
       let output = path.join(outputDir || path.dirname(files[0]), `${base}.ts`);
       output = await getUnusedFileName(output);
 
       const task = await mergeVideos(files, {
         output,
-        removeOrigin: false,
+        removeOrigin: removeOrigin ?? false,
         saveOriginPath: false,
         keepFirstVideoMeta: false,
         name: `合并视频: ${base}`,

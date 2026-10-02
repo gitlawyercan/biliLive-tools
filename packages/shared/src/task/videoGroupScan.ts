@@ -65,6 +65,8 @@ export interface VideoGroupFile {
 export interface VideoGroup {
   /** 分组名，如 张三_2026年9月28日、张三_合并 */
   name: string;
+  /** 净化后的输出文件名主干（剔除 emoji、非法字符替换），与合并输出一致 */
+  outputName: string;
   /** 是否为已合并成品组 */
   isFinished: boolean;
   files: VideoGroupFile[];
@@ -192,7 +194,14 @@ export async function scanVideoGroups(
           log.error("scanVideoGroups, stat file error", file.path, error);
         }
       }
-      return { name: group.name, isFinished: group.isFinished, files: group.files, count: group.files.length, sizeBytes };
+      return {
+        name: group.name,
+        outputName: buildOutputBase(group.name),
+        isFinished: group.isFinished,
+        files: group.files,
+        count: group.files.length,
+        sizeBytes,
+      };
     }),
   );
 }

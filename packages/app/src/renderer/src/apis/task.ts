@@ -130,6 +130,8 @@ export interface VideoGroupFile {
 
 export interface VideoGroup {
   name: string;
+  /** 净化后的输出文件名主干（剔除 emoji、非法字符），与合并输出一致 */
+  outputName: string;
   isFinished: boolean;
   files: VideoGroupFile[];
   count: number;
@@ -151,12 +153,14 @@ const scanVideoGroups = async (
 };
 
 /**
- * 分组批量合并，每个分组一个合并任务
+ * 分组批量合并，每个分组一个合并任务；单文件分组直接移动重命名
  */
 const mergeVideoGroups = async (data: {
   groups: { name: string; files: string[] }[];
   outputDir?: string;
   autoPrefix?: string;
+  /** 多文件分组合并成功后移除源文件（进回收站） */
+  removeOrigin?: boolean;
 }): Promise<{
   results: { name: string; taskId?: string; output?: string; error?: string }[];
 }> => {
