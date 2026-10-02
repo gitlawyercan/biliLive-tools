@@ -20,6 +20,14 @@ import type {
 import { getInfo, getStream } from "./stream.js";
 import { singleton } from "./utils.js";
 import { resolveShortURL, parseUser } from "./douyin_api.js";
+import {
+  LIMIT_STOP_REASON,
+  isExhausted,
+  onSegmentEnd,
+  onSegmentStart,
+  shouldProbeNow,
+  syncSession,
+} from "./maxDuration.js";
 
 import DouYinDanmaClient from "douyin-danma-listener";
 
@@ -104,8 +112,23 @@ const checkLiveStatusAndRecord: Recorder["checkLiveStatusAndRecord"] = async fun
   isManualStart,
   streamRetryHint,
 }) {
+  // 【新增】额度用尽后的降频闸门。必须放在 getInfo() 之前，否则每个检查周期
+  // 仍会发一次请求，节流就白做了。手动开始时放行，保证用户手点「开始录制」
+  // 能立即生效。
+  if (!isManualStart && isExhausted(this) && !shouldProbeNow(this.id)) {
+    this.tempStopIntervalCheck = true;
+    return null;
+  }
+
   // 如果已经在录制中,只在需要检查标题关键词时才获取最新信息
   if (this.recordHandle != null) {
+    // 【新增】单场时长上限兜底。主停止由 onSegmentStart 的定时器负责，
+    // 这里用于应对定时器被系统挂起或节流的情况。
+    if (isExhausted(this)) {
+      await this.recordHandle.stop(LIMIT_STOP_REASON);
+      return null;
+    }
+
     const shouldStop = await utils.checkTitleKeywordsWhileRecording(
       this,
       isManualStart,
@@ -135,6 +158,15 @@ const checkLiveStatusAndRecord: Recorder["checkLiveStatusAndRecord"] = async fun
     this.liveInfo = liveInfo;
     isLiveRadio = liveInfo.isLiveRadio;
     this.emit("stateChange", { state: "idle" });
+
+    // 【新增】场次边界同步：下播 / 换场次 → 重置额度；手动开始 → 重新授予额度。
+    // 录制中不会执行到这里（前面已 early return），正好符合「录制中不重置额度」。
+    syncSession({
+      recorderId: this.id,
+      liveId: liveInfo.liveId,
+      living: liveInfo.living,
+      isManualStart,
+    });
   } catch (error) {
     this.emit("stateChange", {
       state: "check-error",
@@ -143,7 +175,12 @@ const checkLiveStatusAndRecord: Recorder["checkLiveStatusAndRecord"] = async fun
     throw error;
   }
 
-  if (this.liveInfo.liveId && this.liveInfo.liveId === banLiveId) {
+  // 【新增】本场额度已用尽 —— 与「被 ban」等效：停掉本场检查，等下一场。
+  // 下一场开播时场次变化，额度会被 syncSession 重置。
+  if (
+    isExhausted(this) ||
+    (this.liveInfo.liveId && this.liveInfo.liveId === banLiveId)
+  ) {
     this.tempStopIntervalCheck = true;
   } else {
     this.tempStopIntervalCheck = false;
@@ -494,6 +531,8 @@ const checkLiveStatusAndRecord: Recorder["checkLiveStatusAndRecord"] = async fun
     }
     this.usedStream = undefined;
     this.usedSource = undefined;
+    // 【新增】录制段结束，把本段实际时长累加进单场额度
+    onSegmentEnd(this);
     this.emit("RecordStop", { recordHandle: this.recordHandle, reason });
     this.recordHandle = undefined;
     this.liveInfo = undefined;
@@ -513,6 +552,9 @@ const checkLiveStatusAndRecord: Recorder["checkLiveStatusAndRecord"] = async fun
     cut,
   };
   this.emit("RecordStart", this.recordHandle);
+
+  // 【新增】记录本段起点，并按剩余额度装精确停止定时器
+  onSegmentStart(this);
 
   return this.recordHandle;
 };
