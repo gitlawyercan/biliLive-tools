@@ -1,5 +1,7 @@
 import path from "node:path";
 
+import type { Dirent } from "node:fs";
+
 import fse from "fs-extra";
 
 import log from "../utils/log.js";
