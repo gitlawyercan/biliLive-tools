@@ -908,6 +908,8 @@ export interface VideoMergeOptions {
   removeOrigin: boolean; // 完成后移除源文件
   saveOriginPath: boolean; // 保存到原始文件夹
   keepFirstVideoMeta: boolean; // 保留第一个视频元数据
+  /** 自定义任务名称（可选），不传时按目录生成 */
+  name?: string;
 }
 
 export interface File {

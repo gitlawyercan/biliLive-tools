@@ -122,6 +122,48 @@ const checkMergeVideos = async (
   return res.data;
 };
 
+export interface VideoGroupFile {
+  path: string;
+  name: string;
+  timestamp: number;
+}
+
+export interface VideoGroup {
+  name: string;
+  isFinished: boolean;
+  files: VideoGroupFile[];
+  count: number;
+  sizeBytes: number;
+}
+
+/**
+ * 扫描目录并按「前缀_日期」分组
+ */
+const scanVideoGroups = async (
+  inputDir: string,
+  options: { recursive?: boolean; excludeDirs?: string[] } = {},
+): Promise<{ groups: VideoGroup[] }> => {
+  const res = await request.post(`/task/scanVideoGroups`, {
+    inputDir,
+    ...options,
+  });
+  return res.data;
+};
+
+/**
+ * 分组批量合并，每个分组一个合并任务
+ */
+const mergeVideoGroups = async (data: {
+  groups: { name: string; files: string[] }[];
+  outputDir?: string;
+  autoPrefix?: string;
+}): Promise<{
+  results: { name: string; taskId?: string; output?: string; error?: string }[];
+}> => {
+  const res = await request.post(`/task/mergeVideoGroups`, data);
+  return res.data;
+};
+
 const transcode = async (
   input: string,
   /** 包含后缀 */
@@ -374,6 +416,8 @@ const task = {
   downloadVideo,
   cut,
   checkMergeVideos,
+  scanVideoGroups,
+  mergeVideoGroups,
   addExtraVideoTask,
   downloadFile,
   editVideoPartName,

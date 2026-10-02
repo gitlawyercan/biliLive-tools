@@ -24,8 +24,18 @@ import {
   cut,
   checkMergeVideos,
 } from "@biliLive-tools/shared/task/video.js";
+import {
+  scanVideoGroups,
+  buildOutputBase,
+} from "@biliLive-tools/shared/task/videoGroupScan.js";
 import { biliApi, validateBiliupConfig } from "@biliLive-tools/shared/task/bili.js";
-import { trashItem, parseSavePath, uuid, getTempPath } from "@biliLive-tools/shared/utils/index.js";
+import {
+  trashItem,
+  parseSavePath,
+  uuid,
+  getTempPath,
+  getUnusedFileName,
+} from "@biliLive-tools/shared/utils/index.js";
 import {
   testVirtualRecordConfig,
   executeVirtualRecordConfig,
@@ -34,6 +44,7 @@ import { flvRepair } from "@biliLive-tools/shared/task/flvRepair.js";
 import { generateWaveformData } from "@biliLive-tools/shared/task/audiowaveform.js";
 import { musicDetect } from "@biliLive-tools/shared/musicDetector/index.js";
 import { fileCache, appConfig } from "../index.js";
+import log from "@biliLive-tools/shared/utils/log.js";
 
 import type { DanmuPreset, DanmaOptions } from "@biliLive-tools/types";
 import type { DetectionConfig } from "music-segment-detector";
@@ -228,6 +239,75 @@ router.post("/checkMergeVideos", async (ctx) => {
   };
   const result = await checkMergeVideos(inputVideos);
   ctx.body = result;
+});
+
+/**
+ * 扫描目录并按「前缀_日期」分组（参照 v2 合并项目）
+ */
+router.post("/scanVideoGroups", async (ctx) => {
+  const { inputDir, recursive, excludeDirs } = ctx.request.body as {
+    inputDir: string;
+    recursive?: boolean;
+    excludeDirs?: string[];
+  };
+  if (!inputDir) {
+    ctx.status = 400;
+    ctx.body = "inputDir is required";
+    return;
+  }
+  const groups = await scanVideoGroups(inputDir, {
+    recursive,
+    excludeDirs,
+  });
+  ctx.body = { groups };
+});
+
+/**
+ * 分组批量合并：每个分组提交为一个合并任务（-c copy 无损，无重编码）
+ * 一致性检查由前端在提交前调用 /task/checkMergeVideos 完成并提示，此处不阻断
+ */
+router.post("/mergeVideoGroups", async (ctx) => {
+  const { groups, outputDir, autoPrefix } = ctx.request.body as {
+    groups: { name: string; files: string[] }[];
+    outputDir?: string;
+    autoPrefix?: string;
+  };
+  if (!groups || !Array.isArray(groups) || groups.length === 0) {
+    ctx.status = 400;
+    ctx.body = "groups is required";
+    return;
+  }
+
+  const results: { name: string; taskId?: string; output?: string; error?: string }[] = [];
+  for (const group of groups) {
+    const { name, files } = group;
+    try {
+      if (!files || files.length < 2) {
+        throw new Error("文件数不足，至少需要2个文件");
+      }
+      for (const file of files) {
+        if (!(await fs.pathExists(file))) {
+          throw new Error(`文件不存在: ${file}`);
+        }
+      }
+      const base = buildOutputBase(name, autoPrefix || "");
+      let output = path.join(outputDir || path.dirname(files[0]), `${base}.ts`);
+      output = await getUnusedFileName(output);
+
+      const task = await mergeVideos(files, {
+        output,
+        removeOrigin: false,
+        saveOriginPath: false,
+        keepFirstVideoMeta: false,
+        name: `合并视频: ${base}`,
+      });
+      results.push({ name, taskId: task.taskId, output });
+    } catch (error) {
+      log.error("mergeVideoGroups, merge group error", name, error);
+      results.push({ name, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  ctx.body = { results };
 });
 
 router.post("/mergeVideo", async (ctx) => {

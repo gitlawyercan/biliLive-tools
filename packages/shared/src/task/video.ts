@@ -1308,7 +1308,7 @@ export const mergeVideos = async (
     command,
     {
       output: outputFile,
-      name: `合并视频任务: ${path.dirname(inputFiles[0])}等文件`,
+      name: options.name ?? `合并视频任务: ${path.dirname(inputFiles[0])}等文件`,
     },
     {
       onProgress(progress) {
