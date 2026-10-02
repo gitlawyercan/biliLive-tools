@@ -77,6 +77,7 @@ export const recorderNoGlobalFollowFields: Array<
   "proxy",
   "doubleScreen",
   "useServerTimestamp",
+  "douyinMaxRecordHours",
 ];
 
 // 通用预设
@@ -601,6 +602,12 @@ export interface Recorder {
     | TikTokRecorderConfig["api"];
   /** 自定义host */
   customHost?: string;
+  /**
+   * 抖音单场录制时长上限，单位小时，支持小数（如 1.5）。
+   * 小于等于 0 或留空表示不限制。
+   * 录满后本场不再录制，下场直播重新计算。当前仅抖音平台生效。
+   */
+  douyinMaxRecordHours?: number;
   // 不跟随全局配置字段
   noGlobalFollowFields: typeof recorderNoGlobalFollowFields;
 }
