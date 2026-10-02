@@ -140,7 +140,9 @@ export async function scanVideoGroups(
     const videoMatch = fileName.match(VIDEO_PATTERN);
     if (videoMatch) {
       const prefix = videoMatch[1];
-      const datePart = normalizeDate(videoMatch[2]);
+      // 分组键只取日期部分（归组按「前缀_日期」，同日不同时段的分段合为一组），与 v2 _norm_date 行为一致
+      const dateOnly = videoMatch[2].match(/\d{4}年\d{1,2}月\d{1,2}日/)![0];
+      const datePart = normalizeDate(dateOnly);
       const key = `${prefix}_${datePart}`;
       let group = groupMap.get(key);
       if (!group) {
@@ -166,7 +168,7 @@ export async function scanVideoGroups(
 
   // 组内按录制时间升序
   for (const group of groups) {
-    group.files.sort((a, b) => a.timestamp - b.timestamp || a.name.localeCompare(b.name, "zh-Hans-CN", { numeric: true }));
+    group.files.sort((a, b) => a.timestamp - b.timestamp || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   }
 
   // 组间排序：成品最后 -> 日期倒序 -> 前缀升序
@@ -175,7 +177,7 @@ export async function scanVideoGroups(
     const dateA = parseGroupDate(a.name);
     const dateB = parseGroupDate(b.name);
     if (dateA !== dateB) return dateB - dateA;
-    return a.name.localeCompare(b.name, "zh-Hans-CN", { numeric: true });
+    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
   });
 
   // 补充统计信息
