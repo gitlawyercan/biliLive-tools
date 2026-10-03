@@ -1,6 +1,6 @@
 {
   "name": "@biliLive-tools/root",
-  "version": "3.24.1-fix2",
+  "version": "3.24.1-fix3",
   "description": "B站直播录制处理工具",
   "author": "renmu123",
   "license": "GPL-3.0-only",
