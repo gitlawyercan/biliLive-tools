@@ -38,6 +38,7 @@ jobs:
         run: pnpm run --filter bililive-cli build
 
       - name: Publish to npm
+        if: env.NODE_AUTH_TOKEN != ''
         shell: bash
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

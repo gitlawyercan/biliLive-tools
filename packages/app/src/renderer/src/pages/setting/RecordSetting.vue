@@ -1014,6 +1014,11 @@ const douyinLogin = async () => {
   const status = await confirmCookieLoginRisk("抖音");
   if (!status) return;
 
+  if (isWeb.value) {
+    openQrLogin("douyin");
+    return;
+  }
+
   const cookie = await window.api.cookie.douyinLogin();
   config.value.recorder.douyin.cookie = cookie;
 };
@@ -1022,9 +1027,116 @@ const douyuLogin = async () => {
   const status = await confirmCookieLoginRisk("斗鱼");
   if (!status) return;
 
+  if (isWeb.value) {
+    openQrLogin("douyu");
+    return;
+  }
+
   const cookie = await window.api.cookie.douyuLogin();
   config.value.recorder.douyu.cookie = cookie;
 };
+
+// ---------------------------------------------------------------------------
+// Web（docker/browser）模式扫码登录
+// ---------------------------------------------------------------------------
+const qrLogin = reactive({
+  show: false,
+  platform: "douyu" as "douyu" | "douyin",
+  id: "",
+  qrUrl: "",
+  img: "",
+  status: "waiting" as string,
+  text: "",
+});
+let qrTimer: number | null = null;
+
+const stopQrPolling = () => {
+  if (qrTimer !== null) {
+    clearInterval(qrTimer);
+    qrTimer = null;
+  }
+};
+
+const clearQrLogin = () => {
+  stopQrPolling();
+  if (qrLogin.id && qrLogin.platform === "douyin") {
+    loginApi.cancel("douyin", qrLogin.id).catch(() => {});
+  }
+  qrLogin.id = "";
+  qrLogin.qrUrl = "";
+  qrLogin.img = "";
+  qrLogin.status = "waiting";
+  qrLogin.text = "";
+};
+
+const refreshQrLogin = () => {
+  const platform = qrLogin.platform;
+  clearQrLogin();
+  openQrLogin(platform);
+};
+
+const openQrLogin = async (platform: "douyu" | "douyin") => {
+  clearQrLogin();
+  qrLogin.platform = platform;
+  qrLogin.show = true;
+  qrLogin.text = "正在获取二维码...";
+  try {
+    const res = await loginApi.getQrcode(platform);
+    if (!res.ok || !res.data) {
+      qrLogin.text = res.error || "获取二维码失败";
+      return;
+    }
+    qrLogin.id = res.data.id;
+    qrLogin.qrUrl = res.data.qrUrl || "";
+    qrLogin.img = res.data.qrcode || "";
+    qrLogin.status = res.data.status || "waiting";
+    qrLogin.text = res.data.message || "请使用App扫描二维码";
+
+    qrTimer = window.setInterval(async () => {
+      try {
+        const checkRes = await loginApi.check(platform, qrLogin.id);
+        if (!checkRes.ok || !checkRes.data) {
+          stopQrPolling();
+          qrLogin.status = "error";
+          qrLogin.text = checkRes.error || "检查登录状态失败";
+          return;
+        }
+        const { status, message, qrcode, cookie } = checkRes.data;
+        if (qrcode && !qrLogin.img) qrLogin.img = qrcode;
+        if (status === "completed") {
+          stopQrPolling();
+          qrLogin.status = "completed";
+          qrLogin.text = "登录成功，点击保存使 Cookie 生效";
+          if (platform === "douyu") {
+            config.value.recorder.douyu.cookie = cookie || "";
+          } else {
+            config.value.recorder.douyin.cookie = cookie || "";
+          }
+          return;
+        }
+        if (status === "expired" || status === "cancelled" || status === "error") {
+          stopQrPolling();
+          qrLogin.status = status;
+          qrLogin.text = message || "二维码已失效，请重新获取";
+          return;
+        }
+        qrLogin.status = status;
+        qrLogin.text = message || qrLogin.text;
+      } catch {
+        /* 轮询失败时静默重试 */
+      }
+    }, 2000);
+  } catch (err: any) {
+    qrLogin.text = err?.message || "获取二维码失败";
+  }
+};
+
+watch(
+  () => qrLogin.show,
+  (show) => {
+    if (!show) clearQrLogin();
+  },
+);
 </script>
 
 <style scoped lang="less">
