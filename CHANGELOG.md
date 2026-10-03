@@ -1,3 +1,17 @@
+# 3.25.1-fix1(2026.10.03)
+
+## 功能
+
+- **抖音录制链路风控加固**：对已添加直播间的状态探测/房间信息接口做请求指纹一致性与浏览器级请求头强化（仅改请求特征，不动 a_bogus/`__ac_signature` 签名算法，接口调用方式不变）
+  - **UA 全链路统一**：此前 axios 默认 Chrome/119、HTML 解析路径 Chrome/133 Edg、ABogus 签名内置 Chrome/130 Edg 三种混用，属典型客户端指纹不一致特征；现统一为 ABogus 内置版本（a_bogus 用 UA 参与签名，签名 UA 与请求头 UA 本就必须严格一致）
+  - **enter 接口参数与 UA 对齐**：`browser_platform` MacIntel→Win32、`browser_version` 108.0.0.0→130.0.0.0（原参数与 Windows UA 自相矛盾；a_bogus 对修改后的 query 重新签名，三者自洽）
+  - **补齐浏览器级请求头**：首页/用户页/房间页补 document 导航头（`Accept`、`Upgrade-Insecure-Requests`、`sec-fetch-*`），enter 补 XHR 头（`Referer`、`Accept`、`sec-fetch-*`），全部路径补 `sec-ch-ua` Client Hints（版本与 UA 严格一致）；补头不参与 a_bogus 签名，无兼容风险
+  - 已对真实服务器实测：首页 ttwid 获取、enter 接口（web）、房间页解析（webHTML）三条链路全部正常返回
+
+## 其他
+
+- 版本号更新为 `3.25.1-fix1`
+
 # 3.25.1(2026.10.03)
 
 ## 功能

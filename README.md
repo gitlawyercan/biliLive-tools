@@ -119,6 +119,15 @@ GPLv3
 
 以下为本仓库在原项目基础上自行维护的改动记录（按版本倒序）。Docker 镜像同步发布至 DockerHub 与 GHCR（`ghcr.io/gitlawyercan/bililive-tools`）。
 
+## 3.25.1-fix1（2026-10-03）
+
+- **[feat] 抖音录制链路风控加固**（`packages/DouYinRecorder/src/douyin_api.ts`）
+  对已添加直播间的状态探测/房间信息请求做指纹一致性与请求头强化（不动签名算法）：
+  ① UA 全链路统一为 ABogus 内置版本（原 axios 119 / HTML 路径 133 Edg / ABogus 130 Edg 三种混用）；
+  ② enter 接口参数与 UA 对齐（`browser_platform` MacIntel→Win32、`browser_version` 108→130）；
+  ③ 补齐浏览器级请求头（document 导航头 / enter XHR 头 / `sec-ch-ua` Client Hints）。
+  方案：a_bogus 用 UA 参与签名，签名 UA 与请求头 UA 必须严格一致，统一后签名-参数-UA 自洽；补头不参与签名，无兼容风险。已对真实服务器实测三条链路（ttwid 获取 / web enter / webHTML）全部正常。
+
 ## 3.25.1（2026-10-03）抖音风控专项
 
 - **[feat] 抖音扫码登录全面抗风控加固**（`packages/http/src/services/douyinLogin.ts`）
