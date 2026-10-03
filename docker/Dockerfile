@@ -94,7 +94,7 @@ COPY --from=backend-build /app/packages/CLI/package.json /app/package.json
 COPY --from=backend-build /app/packages/app/resources/bin /app/bin
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends libfontconfig1-dev gosu && \
+    apt-get install -y --no-install-recommends libfontconfig1-dev gosu chromium && \
     apt-get install -y /app/bin/audiowaveform.deb && \
     rm -rf /var/lib/apt/lists/*
 RUN npm install --force
@@ -141,6 +141,7 @@ RUN apt-get update && \
     debian-archive-keyring \
     apt-transport-https \
     curl \
+    chromium \
     gosu && \
     apt-get install -y /app/bin/audiowaveform.deb && \
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg && \

@@ -372,7 +372,6 @@
               show-password-on="click"
             />
             <n-button
-              v-if="!isWeb"
               type="primary"
               style="margin-left: 10px"
               @click="douyuLogin"
@@ -548,7 +547,6 @@
               show-password-on="click"
             />
             <n-button
-              v-if="!isWeb"
               type="primary"
               style="margin-left: 10px"
               @click="douyinLogin"
@@ -790,6 +788,43 @@
         </n-tab-pane>
       </n-tabs>
     </n-form>
+
+    <n-modal v-model:show="qrLogin.show" :mask-closable="false" auto-focus>
+      <n-card
+        style="width: 360px"
+        :bordered="false"
+        size="huge"
+        role="dialog"
+        aria-modal="true"
+        :title="qrLogin.platform === 'douyu' ? '斗鱼扫码登录' : '抖音扫码登录'"
+      >
+        <div style="text-align: center">
+          <template v-if="qrLogin.status === 'completed'">
+            <h3>登录成功，点击保存使 Cookie 生效</h3>
+          </template>
+          <template v-else-if="qrLogin.img">
+            <img :src="qrLogin.img" style="width: 240px; height: 240px" alt="二维码" />
+            <p style="margin-top: 8px">{{ qrLogin.text || "请使用App扫描二维码" }}</p>
+          </template>
+          <template v-else-if="qrLogin.qrUrl">
+            <n-qr-code :value="qrLogin.qrUrl" :size="240" error-correction-level="M" />
+            <p style="margin-top: 8px">{{ qrLogin.text || "请使用App扫描二维码" }}</p>
+          </template>
+          <template v-else>
+            <n-spin size="medium" />
+            <p style="margin-top: 8px">{{ qrLogin.text || "正在获取二维码..." }}</p>
+          </template>
+        </div>
+        <template #footer>
+          <div class="footer">
+            <n-button v-if="qrLogin.status === 'expired'" @click="refreshQrLogin">
+              重新获取
+            </n-button>
+            <n-button class="btn" @click="qrLogin.show = false">取消</n-button>
+          </div>
+        </template>
+      </n-card>
+    </n-modal>
   </div>
 </template>
 
@@ -800,6 +835,7 @@ import { useBreakpoints } from "@renderer/hooks";
 import { showDirectoryDialog } from "@renderer/utils/fileSystem";
 import { useUserInfoStore } from "@renderer/stores";
 import { useConfirm } from "@renderer/hooks";
+import { loginApi } from "@renderer/apis";
 import {
   biliQualityOptions,
   douyuQualityOptions,
