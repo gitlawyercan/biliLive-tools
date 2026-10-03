@@ -32,6 +32,7 @@
               class="file"
               :class="{ selected: selectedFiles.includes(file.path) }"
               @click="selectFile(file)"
+              @dblclick="handleDblClick(file)"
             >
               <span class="file-name">
                 {{ file.type === "directory" ? "📁" : "📄" }} {{ file.name }}
@@ -211,6 +212,13 @@ const selectFile = (file: BrowserFileItem) => {
     }
   } else {
     selectedFiles.value = [file.path];
+  }
+};
+
+// 双击进入文件夹（目录模式下单击为选中，双击进入）
+const handleDblClick = (file: BrowserFileItem) => {
+  if (file.type === "directory") {
+    openDirectory(file);
   }
 };
 
