@@ -119,6 +119,11 @@ GPLv3
 
 以下为本仓库在原项目基础上自行维护的改动记录（按版本倒序）。Docker 镜像同步发布至 DockerHub 与 GHCR（`ghcr.io/gitlawyercan/bililive-tools`）。
 
+## 未发布
+
+- **[fix] 文件浏览器：目录模式下双击文件夹可进入**（`FileBrowserDialog.vue`）
+  原组件在目录模式（如视频合并选择扫描/输出目录）下单击文件夹仅做选中高亮，无法进入子目录，子目录路径只能手动输入。现改为单击选中、双击进入，符合通用文件选择器习惯。
+
 ## 3.24.1-fix3（2026-10-03）
 
 - **[feat] Web/docker 模式新增斗鱼、抖音扫码登录**（`packages/http/src/routes/login.ts`、`services/douyinLogin.ts`、`RecordSetting.vue`）
