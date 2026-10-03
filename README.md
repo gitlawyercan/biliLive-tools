@@ -119,6 +119,12 @@ GPLv3
 
 以下为本仓库在原项目基础上自行维护的改动记录（按版本倒序）。Docker 镜像同步发布至 DockerHub 与 GHCR（`ghcr.io/gitlawyercan/bililive-tools`）。
 
+## 3.25.1-fix2（2026-10-03）
+
+- **[fix] 视频合并：补前缀时名称已含前缀的分组不再重复添加**（`packages/shared/src/task/videoGroupScan.ts`、`VideoMerge.vue`）
+  开启"补前缀"后，分组名本身已含该前缀的（如分组名 `萌妹直播：萌妹精选：奥特琪_2026年10月2日`、前缀 `萌妹精选`），此前会重复拼成 `萌妹精选：萌妹直播：萌妹精选：…`；现前缀主体已包含于分组名时保持原名。
+  方案：`buildOutputBase` 在拼接前做包含判断，前缀同步净化（剔 emoji、半角冒号转全角、非法字符替换 `_`）；前端合并后名称预览与后端逻辑对齐。隔离测试 8 用例（含用户实际场景）全部通过。
+
 ## 3.25.1-fix1（2026-10-03）
 
 - **[feat] 抖音录制链路风控加固**（`packages/DouYinRecorder/src/douyin_api.ts`）
