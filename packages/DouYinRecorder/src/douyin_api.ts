@@ -5,14 +5,40 @@ import { assert, get__ac_signature } from "./utils.js";
 import { ABogus } from "./sign.js";
 import type { APIType, RoomInfo, RealAPIType } from "./types.js";
 
+/**
+ * 全链路统一 UA（与 ABogus 内置 UA 严格一致）。
+ * a_bogus 使用 UA 参与签名运算，签名时的 UA 与请求头 UA 必须完全相同；
+ * 此前 axios 默认 119、userHTML/roomHTML 133 Edg、ABogus 130 Edg 三种混用，
+ * 是典型的客户端指纹不一致特征。
+ */
+const DOUYIN_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0";
+
+/** Client Hints 请求头（sec-ch-ua 版本与 UA 中的 Chrome/Edge 版本严格一致） */
+const DOUYIN_CLIENT_HINTS = {
+  "sec-ch-ua": '"Microsoft Edge";v="130", "Chromium";v="130", "Not=A?Brand";v="24"',
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"Windows"',
+};
+
+/** 文档级导航请求头（访问 HTML 页面时使用） */
+const DOUYIN_DOCUMENT_HEADERS = {
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+  "Upgrade-Insecure-Requests": "1",
+  "sec-fetch-dest": "document",
+  "sec-fetch-mode": "navigate",
+  "sec-fetch-user": "?1",
+  ...DOUYIN_CLIENT_HINTS,
+};
+
 const requester = axios.create({
   timeout: 10e3,
   // axios 会自动读取环境变量中的 http_proxy 和 https_proxy 并应用，这会让请求发往代理的 host。
   // 所以这里需要主动禁用代理功能。
   proxy: false,
   headers: {
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "User-Agent": DOUYIN_UA,
   },
 });
 
@@ -84,7 +110,13 @@ export const getCookie = async () => {
   if (cookieCache?.startTimestamp && now - cookieCache.startTimestamp < 6 * 60 * 60 * 1000) {
     return cookieCache.cookies;
   }
-  const res = await requester.get("https://live.douyin.com/");
+  const res = await requester.get("https://live.douyin.com/", {
+    headers: {
+      // 直接打开首页：无 Referer、sec-fetch-site 为 none
+      "sec-fetch-site": "none",
+      ...DOUYIN_DOCUMENT_HEADERS,
+    },
+  });
   if (!res.headers["set-cookie"]) {
     throw new Error("No cookie in response");
   }
@@ -149,8 +181,7 @@ async function getRoomInfoByUserWeb(
   } = {},
 ): Promise<RoomInfo> {
   const url = `https://www.douyin.com/user/${secUserId}`;
-  const ua =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0";
+  const ua = DOUYIN_UA;
   let nonce = "068ea1c0100bb2c06590f";
 
   try {
@@ -171,6 +202,9 @@ async function getRoomInfoByUserWeb(
   const res = await requester.get(url, {
     headers: {
       "User-Agent": ua,
+      // 直接打开用户页：无 Referer、sec-fetch-site 为 none
+      "sec-fetch-site": "none",
+      ...DOUYIN_DOCUMENT_HEADERS,
       cookie: cookies,
     },
   });
@@ -278,8 +312,7 @@ async function getRoomInfoByHtml(
   } = {},
 ): Promise<RoomInfo> {
   const url = `https://live.douyin.com/${webRoomId}`;
-  const ua =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0";
+  const ua = DOUYIN_UA;
   const nonce = generateNonce();
 
   let cookies: string | undefined = undefined;
@@ -294,6 +327,10 @@ async function getRoomInfoByHtml(
   const res = await requester.get(url, {
     headers: {
       "User-Agent": ua,
+      // 从首页进入房间页：带首页 Referer、sec-fetch-site 为 same-origin
+      Referer: "https://live.douyin.com/",
+      "sec-fetch-site": "same-origin",
+      ...DOUYIN_DOCUMENT_HEADERS,
       cookie: cookies,
     },
   });
@@ -366,9 +403,10 @@ async function getRoomInfoByWeb(
     screen_width: 1920,
     screen_height: 1080,
     browser_language: "zh-CN",
-    browser_platform: "MacIntel",
+    // 与 UA（Windows / Chrome 130）严格一致：此前 MacIntel + 108 与 UA 自相矛盾
+    browser_platform: "Win32",
     browser_name: "Chrome",
-    browser_version: "108.0.0.0",
+    browser_version: "130.0.0.0",
     web_rid: webRoomId,
     "Room-Enter-User-Login-Ab": 0,
     is_need_double_stream: "false",
@@ -383,6 +421,13 @@ async function getRoomInfoByWeb(
       headers: {
         cookie: cookies,
         "User-Agent": ua,
+        // 页面内 XHR 请求的真实浏览器头部（a_bogus 只签 query + UA，补头不影响签名）
+        Referer: `https://live.douyin.com/${webRoomId}`,
+        Accept: "application/json, text/plain, */*",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        ...DOUYIN_CLIENT_HINTS,
       },
     },
   );
