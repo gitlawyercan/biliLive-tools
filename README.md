@@ -119,6 +119,12 @@ GPLv3
 
 以下为本仓库在原项目基础上自行维护的改动记录（按版本倒序）。Docker 镜像同步发布至 DockerHub 与 GHCR（`ghcr.io/gitlawyercan/bililive-tools`）。
 
+## 3.24.1-fix3（2026-10-03）
+
+- **[feat] Web/docker 模式新增斗鱼、抖音扫码登录**（`packages/http/src/routes/login.ts`、`services/douyinLogin.ts`、`RecordSetting.vue`）
+  原项目登录按钮带 `v-if="!isWeb"` 仅在客户端显示，docker 部署后只能手动抓 Cookie。现设置页在 Web 模式下弹出二维码弹窗并轮询状态，扫码成功自动回填 Cookie。
+  方案：斗鱼走服务端直连官方接口（`passport.douyu.com/scan/generateCode` 获取二维码 → `lapi/passport/qrcode/check` 轮询 → 登录地址换取 Cookie），无需浏览器；抖音因 SSO 接口存在 TLS 指纹级风控，服务端通过 CDP 驱动无头 Chromium 打开官方登录页，监听页面自身的 `get_qrcode`/`check_qrconnect` 响应完成登录（`docker/Dockerfile` 的 backend/fullstack 镜像内置 chromium，可用 `CHROMIUM_PATH` 覆盖）；客户端（Electron）登录方式不变。
+
 ## 3.24.1-fix2（2026-10-03）
 
 - **[feat] 视频合并三项增强**（`29fd4fe8`）
