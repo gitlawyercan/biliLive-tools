@@ -146,9 +146,12 @@ const outputDisplayName = (row: VideoGroup): string => {
   // 前缀净化：半角冒号转全角、其余非法字符替换为 _
   let full = prefix.replace(/:/g, "：").replace(/[<>"/\\|?*]/g, "_").trim();
   if (!full.endsWith("：")) full = `${full}：`;
-  // 已含前缀的分组名不再重复添加（前缀主体去掉末尾冒号后做包含判断）
+  // 已含前缀的分组名不再重复添加（前缀主体去掉末尾冒号后做包含判断）；
+  // 名称中已存在「xxx：」前缀段（全角冒号）时同样视为已带前缀，避免嵌套前缀
   const prefixBody = full.slice(0, -1);
-  if (prefixBody && row.outputName.includes(prefixBody)) return row.outputName;
+  if (prefixBody && (row.outputName.includes(prefixBody) || row.outputName.includes("："))) {
+    return row.outputName;
+  }
   return `${full}${row.outputName}`;
 };
 

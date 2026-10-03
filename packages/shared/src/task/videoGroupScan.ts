@@ -212,6 +212,9 @@ export async function scanVideoGroups(
  * - autoPrefix 自动补全角冒号「：」，如 萌妹精选 + 张三_2026年9月28日 -> 萌妹精选：张三_2026年9月28日
  * - 分组名中已包含前缀的不再重复添加：如 前缀 萌妹精选 + 分组名 萌妹直播：萌妹精选：奥特琪_2026年10月2日
  *   保持原名（否则会得到 萌妹精选：萌妹直播：萌妹精选：奥特琪_2026年10月2日）
+ * - 分组名中已存在「xxx：」前缀段（全角冒号）时同样视为已带前缀，不再补：
+ *   如分组名 萌妹精选：小代_2026年10月3日 已带前缀，本次设置 萌妹直播 不应再补成
+ *   萌妹直播：萌妹精选：小代_2026年10月3日
  */
 export function buildOutputBase(groupName: string, autoPrefix = ""): string {
   let base = groupName.replace(EMOJI_RE, "").replace(/[<>:"/\\|?*]/g, "_").trim();
@@ -228,9 +231,9 @@ export function buildOutputBase(groupName: string, autoPrefix = ""): string {
     if (!prefix.endsWith("：")) {
       prefix = `${prefix}：`;
     }
-    // 已含前缀的分组名不再额外添加（前缀主体去掉末尾冒号后做包含判断）
+    // 已含前缀（含本次前缀主体，或名称中已存在「xxx：」前缀段）的不再额外添加
     const prefixBody = prefix.slice(0, -1);
-    if (prefixBody && !base.includes(prefixBody)) {
+    if (prefixBody && !base.includes(prefixBody) && !base.includes("：")) {
       base = `${prefix}${base}`;
     }
   }
