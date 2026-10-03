@@ -26,7 +26,7 @@
         <span style="min-width: 64px">补前缀</span>
         <n-input
           v-model:value="autoPrefix"
-          placeholder="可选，输出文件名前自动添加，如：萌妹精选 → 萌妹精选：张三_2026年9月28日.ts"
+          placeholder="可选，输出文件名前自动添加，如：萌妹精选 → 萌妹精选：张三_2026年9月28日.ts（名称已含前缀时不重复添加）"
           style="flex: 1; min-width: 240px"
           clearable
         />
@@ -139,11 +139,16 @@ const formatSize = (bytes: number): string => {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 };
 
-/** 分组显示名：以合并后的文件名为准（含补前缀预览） */
+/** 分组显示名：以合并后的文件名为准（含补前缀预览，与后端 buildOutputBase 逻辑一致） */
 const outputDisplayName = (row: VideoGroup): string => {
   const prefix = autoPrefix.value.trim();
   if (!prefix) return row.outputName;
-  const full = prefix.endsWith("：") || prefix.endsWith(":") ? prefix : `${prefix}：`;
+  // 前缀净化：半角冒号转全角、其余非法字符替换为 _
+  let full = prefix.replace(/:/g, "：").replace(/[<>"/\\|?*]/g, "_").trim();
+  if (!full.endsWith("：")) full = `${full}：`;
+  // 已含前缀的分组名不再重复添加（前缀主体去掉末尾冒号后做包含判断）
+  const prefixBody = full.slice(0, -1);
+  if (prefixBody && row.outputName.includes(prefixBody)) return row.outputName;
   return `${full}${row.outputName}`;
 };
 

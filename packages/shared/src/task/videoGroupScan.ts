@@ -210,6 +210,8 @@ export async function scanVideoGroups(
  * 生成分组合并的输出文件名主干
  * - 剔除 emoji，非法文件名字符替换为 _
  * - autoPrefix 自动补全角冒号「：」，如 萌妹精选 + 张三_2026年9月28日 -> 萌妹精选：张三_2026年9月28日
+ * - 分组名中已包含前缀的不再重复添加：如 前缀 萌妹精选 + 分组名 萌妹直播：萌妹精选：奥特琪_2026年10月2日
+ *   保持原名（否则会得到 萌妹精选：萌妹直播：萌妹精选：奥特琪_2026年10月2日）
  */
 export function buildOutputBase(groupName: string, autoPrefix = ""): string {
   let base = groupName.replace(EMOJI_RE, "").replace(/[<>:"/\\|?*]/g, "_").trim();
@@ -217,8 +219,20 @@ export function buildOutputBase(groupName: string, autoPrefix = ""): string {
     base = "未命名";
   }
   if (autoPrefix) {
-    const prefix = autoPrefix.endsWith("：") || autoPrefix.endsWith(":") ? autoPrefix : `${autoPrefix}：`;
-    base = `${prefix}${base}`;
+    // 前缀同样净化：剔除 emoji、半角冒号转全角（半角冒号是非法文件名字符）、其余非法字符替换为 _
+    let prefix = autoPrefix
+      .replace(EMOJI_RE, "")
+      .replace(/:/g, "：")
+      .replace(/[<>"/\\|?*]/g, "_")
+      .trim();
+    if (!prefix.endsWith("：")) {
+      prefix = `${prefix}：`;
+    }
+    // 已含前缀的分组名不再额外添加（前缀主体去掉末尾冒号后做包含判断）
+    const prefixBody = prefix.slice(0, -1);
+    if (prefixBody && !base.includes(prefixBody)) {
+      base = `${prefix}${base}`;
+    }
   }
   return base;
 }
