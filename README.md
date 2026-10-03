@@ -119,6 +119,12 @@ GPLv3
 
 以下为本仓库在原项目基础上自行维护的改动记录（按版本倒序）。Docker 镜像同步发布至 DockerHub 与 GHCR（`ghcr.io/gitlawyercan/bililive-tools`）。
 
+## 3.25.1-fix3（2026-10-03）
+
+- **[fix] 视频合并：分组名已含「xxx：」前缀段时不再补前缀**（`packages/shared/src/task/videoGroupScan.ts`、`VideoMerge.vue`）
+  fix2 仅判断"已含本次设置的前缀"；分组名已带其他前缀段的（如上次合并输出 `萌妹精选：小代_2026年10月3日`、本次设置 `萌妹直播`）仍会嵌套成 `萌妹直播：萌妹精选：小代_2026年10月3日`。
+  现分组名（净化后）中已存在全角冒号「：」前缀段即视为已带前缀，保持原名不再拼接；前端合并后名称预览同步该逻辑。干净分组名不受影响，两级前缀正常补。8 场景验证（`vp-test/verify_prefix.mjs`）全部通过。
+
 ## 3.25.1-fix2（2026-10-03）
 
 - **[fix] 视频合并：补前缀时名称已含前缀的分组不再重复添加**（`packages/shared/src/task/videoGroupScan.ts`、`VideoMerge.vue`）
