@@ -119,8 +119,17 @@ GPLv3
 
 以下为本仓库在原项目基础上自行维护的改动记录（按版本倒序）。Docker 镜像同步发布至 DockerHub 与 GHCR（`ghcr.io/gitlawyercan/bililive-tools`）。
 
-## 未发布
+## 3.25.1（2026-10-03）抖音风控专项
 
+- **[feat] 抖音扫码登录全面抗风控加固**（`packages/http/src/services/douyinLogin.ts`）
+  CDP 直连架构保持不变，在五项维度强化无头 Chromium 环境：
+  ① webdriver 痕迹消除（CDP 直连无 WebDriver 层 + 每个新文档注入脚本防御性兜底）；
+  ② UA / Client Hints 一致性（完整下发 `userAgentMetadata`，与 UA 中 Chrome 版本严格一致）；
+  ③ JS 运行环境指纹补全（`plugins`/`mimeTypes`、`languages`、`hardwareConcurrency`、`deviceMemory`、WebGL 厂商/渲染器伪装真实显卡、`window.chrome`）；
+  ④ 持久化浏览器 profile（默认复用固定目录，`DOUYIN_PROFILE_DIR` 可覆盖，容器内可挂载该目录跨重启复用；并发登录自动回退临时目录）；
+  ⑤ 行为特征拟人（页面加载后模拟随机鼠标移动、交互延迟随机化）。
+  另含三项低成本启动参数加固：`--disable-blink-features=AutomationControlled`、真实分辨率 `--window-size=1920,1080`、`--lang=zh-CN`（配合时区覆写 Asia/Shanghai，IP-时区-语言自洽）。
+  方案：`Emulation.setUserAgentOverride` 携带完整 Client Hints + `Emulation.setTimezoneOverride` + `Page.addScriptToEvaluateOnNewDocument` 注入指纹补全脚本（先于页面脚本执行）；**移除 `Runtime.enable`**（该调用改变页面 console API 行为，是已知自动化检测向量，与 rebrowser-patches 结论一致），`Runtime.evaluate` 无需 enable 即可调用，二维码监听走 Network 域不受影响。
 - **[fix] 文件浏览器：目录模式下双击文件夹可进入**（`FileBrowserDialog.vue`）
   原组件在目录模式（如视频合并选择扫描/输出目录）下单击文件夹仅做选中高亮，无法进入子目录，子目录路径只能手动输入。现改为单击选中、双击进入，符合通用文件选择器习惯。
 

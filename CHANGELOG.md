@@ -1,3 +1,20 @@
+# 3.25.1(2026.10.03)
+
+## 功能
+
+- **抖音风控专项加固**：对抖音扫码登录所用的无头 Chromium（CDP 直连架构不变）进行全面抗风控强化
+  - webdriver 痕迹消除：CDP 直连无 WebDriver 层（无 `navigator.webdriver` 标识），另在每个新文档注入脚本防御性兜底
+  - UA / Client Hints 一致性：完整下发 `userAgentMetadata`（brands、platform、架构等），与 UA 中的 Chrome 版本严格一致
+  - JS 运行环境指纹补全：注入脚本补齐 `plugins`/`mimeTypes`、`languages`、`hardwareConcurrency`、`deviceMemory`、WebGL 厂商与渲染器（伪装真实显卡而非 SwiftShader）、`window.chrome` 对象等典型无头指纹
+  - 持久化浏览器 profile：默认复用固定 profile 目录（可用环境变量 `DOUYIN_PROFILE_DIR` 自定义），登录环境跨次保留，避免"全新无痕环境"指纹；并发登录时自动回退一次性临时目录
+  - 行为特征拟人：页面加载后模拟随机鼠标移动（Input 域），交互延迟随机化
+- **三项低成本启动参数加固**：`--disable-blink-features=AutomationControlled`、真实分辨率 `--window-size=1920,1080`、`--lang=zh-CN`（含 `Emulation.setTimezoneOverride` Asia/Shanghai，IP-时区-语言三者自洽）
+- **移除 `Runtime.enable` 调用**：该调用会改变页面 console API 行为，是已知的自动化检测向量（与 rebrowser-patches 同款结论）；`Runtime.evaluate` 无需 enable 即可调用，功能不受影响
+
+## 其他
+
+- 版本号更新为 `3.25.1`
+
 # 3.24.1-fix3(2026.10.03)
 
 ## 功能
