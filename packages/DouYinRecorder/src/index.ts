@@ -106,6 +106,29 @@ function createRecorder(opts: RecorderCreateOpts): Recorder {
 const ffmpegOutputOptions: string[] = [];
 const ffmpegInputOptions: string[] = ["-rw_timeout", "10000000", "-timeout", "10000000"];
 
+// 【#3 房间级冷却退避】
+// 生产日志实锤：限流场景下"所有 API 全失败 → 整轮放弃 → 下一轮照旧全打"，
+// 会持续加重风控等级。此处在房间维度增加退避：连续 3 轮检查失败后跳过若干轮，
+// 给服务端侧的风控计数器留出衰减窗口。手动开始录制不受冷却限制。
+const roomCooldownMap = new Map<string, { consecutiveFailures: number; skipUntil: number }>();
+const ROOM_COOLDOWN_THRESHOLD = 3;
+/** 以默认检查间隔 120s 为基准估算"轮"的时长（录制器无法直接感知调度间隔） */
+const ROOM_ROUND_MS = 120_000;
+
+function recordRoomCheckFailure(channelId: string): void {
+  const entry = roomCooldownMap.get(channelId) ?? { consecutiveFailures: 0, skipUntil: 0 };
+  entry.consecutiveFailures++;
+  if (entry.consecutiveFailures >= ROOM_COOLDOWN_THRESHOLD) {
+    const rounds = entry.consecutiveFailures >= ROOM_COOLDOWN_THRESHOLD * 2 ? 5 : 2;
+    entry.skipUntil = Date.now() + rounds * ROOM_ROUND_MS;
+    console.warn(
+      `[DouYin][房间冷却] ${channelId} 连续 ${entry.consecutiveFailures} 轮检查失败，` +
+        `冷却约 ${Math.round((entry.skipUntil - Date.now()) / 1000)}s 后恢复`,
+    );
+  }
+  roomCooldownMap.set(channelId, entry);
+}
+
 const checkLiveStatusAndRecord: Recorder["checkLiveStatusAndRecord"] = async function ({
   getSavePath,
   banLiveId,
@@ -118,6 +141,15 @@ const checkLiveStatusAndRecord: Recorder["checkLiveStatusAndRecord"] = async fun
   if (!isManualStart && isExhausted(this) && !shouldProbeNow(this.id)) {
     this.tempStopIntervalCheck = true;
     return null;
+  }
+
+  // 【#3 房间级冷却】连续多轮全接口失败的房间跳过本轮检查（手动开始不受限）
+  if (!isManualStart) {
+    const cooldown = roomCooldownMap.get(this.channelId);
+    if (cooldown && Date.now() < cooldown.skipUntil) {
+      this.tempStopIntervalCheck = true;
+      return null;
+    }
   }
 
   // 如果已经在录制中,只在需要检查标题关键词时才获取最新信息
@@ -157,6 +189,8 @@ const checkLiveStatusAndRecord: Recorder["checkLiveStatusAndRecord"] = async fun
     });
     this.liveInfo = liveInfo;
     isLiveRadio = liveInfo.isLiveRadio;
+    // 【#3 房间级冷却】检查成功即清零失败计数
+    roomCooldownMap.delete(this.channelId);
     this.emit("stateChange", { state: "idle" });
 
     // 【新增】场次边界同步：下播 / 换场次 → 重置额度；手动开始 → 重新授予额度。
@@ -168,6 +202,8 @@ const checkLiveStatusAndRecord: Recorder["checkLiveStatusAndRecord"] = async fun
       isManualStart,
     });
   } catch (error) {
+    // 【#3 房间级冷却】记录失败，连续多轮失败后进入房间冷却
+    recordRoomCheckFailure(this.channelId);
     this.emit("stateChange", {
       state: "check-error",
       msg: `检查失败，` + (error instanceof Error ? error.message : String(error)),

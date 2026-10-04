@@ -4,6 +4,48 @@
 
 - 斗鱼支持扫码登录与多账号管理，录制配置改为选择账号 UID（升级后旧的斗鱼 Cookie 配置会被移除，需要在“用户”页重新扫码登录。）
 
+# 3.26.1-beta(2026.10.04) 抖音风控加固二期
+
+## 功能
+
+- **[#1/#4] ttwid 改走官方注册接口 + ttwid 池化**（`packages/DouYinRecorder/src/ttwidPool.ts` 新增、`douyin_api.ts`）
+  弃用"抓首页 → `__ac_signature` 伪造 → 换 ttwid"链路为主力，改为 `POST ttwid.bytedance.com/ttwid/union/register/`（aid=6383）服务端直接签发。
+  2026-10-04 实测：官方 ttwid 调 `webcast/room/web/enter` 直接 `status_code=0`，接口不强制 `a_bogus`，ttwid cookie 为硬性要求；签发 token 有效期 365 天。
+  池化：容器内维持 2~3 个 ttwid（LRU + 12~36h 随机寿命轮换），防单 token 被打标；官方接口注册失败自动回退旧抓取链路（保留为兜底）。
+
+- **[#3] 冷却退避：接口级 + 房间级**（`loadBalancer/loadBalancer.ts`、`index.ts`）
+  生产日志实锤：限流响应 `10011`（"Request params error/当前服务繁忙"）触发后整轮所有 API 全失败、下一轮照旧全打，持续加重风控等级。
+  接口级：`10011`/`403`/`verify_required` 识别为风控响应，不等失败阈值直接进入指数退避冷却（1min → 5min → 30min，成功一次立即清零）；冷却中的接口不参与调度，全部冷却时取剩余最短者保底。
+  房间级：连续 3 轮检查全失败的直播间跳过约 2 轮检查（≥6 轮跳 5 轮），手动开始不受限；检查成功即清零。
+
+- **[#2] 检查间隔随机抖动**（`packages/liveManager/src/manager.ts`）
+  检查循环每轮在基准间隔上加 ±25% 随机抖动；房间间 `waitTime` 同样随机化（0.5x~1.5x）。
+  固定周期请求是典型的脚本时序指纹，多份风控资料均提及按"精确周期"识别自动化行为。
+
+- **[#5] mobile 接口补全 verifyFp + msToken 三件套**（`douyin_api.ts`）
+  `getRoomInfoByMobile` 此前 `verifyFp` 传空字符串且无 msToken。现按 `s_v_web_id` 标准格式自造 verifyFp + 116 位随机 msToken，24h 轮换持久化，与全链路 UA 严格一致。
+  注：实测带登录 cookie 调 reflow/info 同样返回 10011，三件套并非限流解药，此改动目的是消除"请求特征缺失"这一可被指纹化的弱点（与上游 PR #180 的 mobile 实现对齐）。
+
+- **[#6] TLS 指纹观察哨 + 硬化预案**（`douyin_api.ts`）
+  观察哨：`web/enter` 携带合法 ttwid 仍连续失败 ≥10 次（403/异常响应）时输出一次告警——这是抖音收紧 TLS/JA3 检测的典型信号。
+  预案：环境变量 `DOUYIN_TLS_HARDEN=1` 启用对齐 Chrome 130 的 https.Agent（密码套件顺序 + ALPN h2/http1.1）。2026-10-04 实测家宽 IP 下 node 直连未被拦截，默认关闭。
+  请求头常量抽离至 `douyin_headers.ts` 供 ttwidPool/签名层共用，保证 UA 全链路唯一。
+
+## 验证记录（2026-10-04，家宽直连，node 22 undici）
+
+| 验证项 | 结果 |
+| --- | --- |
+| 官方 ttwid 注册（aid=6383/1768） | ✅ 200，Max-Age=365 天 |
+| 官方 ttwid 调 web/enter | ✅ status_code=0，含 a_bogus 与否均成功 |
+| web/enter 不带 cookie | ❌ 空响应（ttwid 硬性要求） |
+| reflow/info 空verifyFp/自造verifyFp±msToken±a_bogus/登录cookie | ❌ 均 10011（限流响应，非参数问题） |
+| 生产日志 10011 | ⚠️ 存在"所有 API 全失败"场景，冷却退避必要性确认 |
+
+## 其他
+
+- 版本号更新为 `3.26.1-beta`
+- CI：release 构建仅保留 Windows（win-exe）；tag 触发的 docker/npm 发布已停用（本版本只发 win-exe release，不出 docker 镜像）
+
 # 3.25.1-fix3(2026.10.03)
 
 ## 功能

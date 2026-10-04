@@ -1,6 +1,6 @@
 {
   "name": "bililive-cli",
-  "version": "3.25.1-fix3",
+  "version": "3.26.1-beta",
   "type": "module",
   "description": "biliLive-tools的cli程序",
   "main": "./lib/index.js",

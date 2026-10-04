@@ -8,7 +8,8 @@ on:
 
 jobs:
   build:
-    if: github.event_name == 'push'
+    # 3.26.1-beta 起：tag push 不再自动构建 docker 镜像（仅保留 workflow_dispatch 手动构建）
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
     strategy:
       matrix:

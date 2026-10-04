@@ -13,6 +13,10 @@ export interface APIEndpointStatus {
   lastFailureTime: number;
   isBlocked: boolean;
   nextRetryTime: number;
+  /** 【#3 冷却退避】风控响应（10011/403/verify_required）触发的冷却截止时间 */
+  riskCooldownUntil?: number;
+  /** 【#3 冷却退避】风控连续失败级别（用于指数退避档位） */
+  riskFailLevel?: number;
 }
 
 export interface LoadBalancerConfig {
