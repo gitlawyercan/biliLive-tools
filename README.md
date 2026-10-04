@@ -119,6 +119,12 @@ GPLv3
 
 以下为本仓库在原项目基础上自行维护的改动记录（按版本倒序）。Docker 镜像同步发布至 DockerHub 与 GHCR（`ghcr.io/gitlawyercan/bililive-tools`）。
 
+## 3.26.2-fix1（2026-10-04）单场录制额度持久化
+
+- **[feat] 抖音「单场录制时长上限」支持断线续额**（`packages/DouYinRecorder/src/maxDuration.ts`）
+  此前额度只存内存，docker 容器重启或进程意外退出后，同一场次会「满血重录」整个上限。现按录制周期（段开始 / 录制中每 60s / 段结束）把每场已录时长落盘到与 `appConfig.json` 同目录的 `douyin-quota-state.json`（临时文件 + rename 原子写）。
+  重启后同 liveId 场次自动恢复已录时长、只录剩余时间；换场次 / 下播 / 手动开始仍按原语义重置或清除。崩溃前最后不足 60 秒可能未落盘，恢复后至多多录约 1 分钟。断流重连（进程未重启）行为不变。
+
 ## 3.26.1-beta（2026-10-04）抖音风控加固二期
 
 - **[feat] ttwid 改走官方注册接口 + ttwid 池化**（`packages/DouYinRecorder/src/ttwidPool.ts`、`douyin_api.ts`）
