@@ -7,6 +7,14 @@
   重启后首次检查到同 liveId 场次在播时，自动恢复已录时长，只录剩余时间；换场次、下播、手动开始仍按原语义重置/清除额度。崩溃前最后不足 60 秒的已录时间可能未落盘，恢复后至多多录约 1 分钟。
   断流重连（进程未重启）行为不变：空闲时间不计入额度。
 
+## CI / 构建
+
+- **release 恢复完整构建产物**：3.26.1-beta 曾临时改为仅 win-exe，本版本起恢复三平台（windows / ubuntu / macos）构建与全部产物（exe / zip / deb / snap / dmg / CLI）。
+- **CI 触发方针定型**：tag 推送自动触发 Electron release、docker 镜像（frontend/backend/fullstack → DockerHub + GHCR）、npm 发布；webui 构建改为仅手动（workflow_dispatch）。
+- **构建修复记录**（首两次 tag 构建失败的原因）：
+  1. DouYinRecorder 引入持久化时短暂依赖了 `@biliLive-tools/shared`，导致 `pnpm-lock.yaml` 不匹配（frozen-lockfile 拒绝安装）——已重算 lockfile；
+  2. 跨包依赖使类型解析把 `types/src` 源码卷入 DouYinRecorder 编译，arktype 在 `strictNullChecks:false` 上下文报错——已移除该依赖，shared 包初始化 appConfig 时广播 `BILILIVE_CONFIG_DIR` 环境变量供持久化模块定位目录，零跨包源码解析。
+
 # Next
 
 ## 功能

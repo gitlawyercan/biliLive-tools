@@ -124,6 +124,9 @@ GPLv3
 - **[feat] 抖音「单场录制时长上限」支持断线续额**（`packages/DouYinRecorder/src/maxDuration.ts`）
   此前额度只存内存，docker 容器重启或进程意外退出后，同一场次会「满血重录」整个上限。现按录制周期（段开始 / 录制中每 60s / 段结束）把每场已录时长落盘到与 `appConfig.json` 同目录的 `douyin-quota-state.json`（临时文件 + rename 原子写）。
   重启后同 liveId 场次自动恢复已录时长、只录剩余时间；换场次 / 下播 / 手动开始仍按原语义重置或清除。崩溃前最后不足 60 秒可能未落盘，恢复后至多多录约 1 分钟。断流重连（进程未重启）行为不变。
+- **[ci] 构建方针调整**
+  release 恢复三平台完整构建产物（exe / zip / deb / snap / dmg / CLI）；docker 镜像与 npm 发布恢复 tag 推送自动触发；webui 构建改为仅手动（workflow_dispatch）。
+  过程中修复两次构建失败：lockfile 与新增依赖不匹配；跨包类型解析触发 arktype/strict 冲突（最终改为经 `BILILIVE_CONFIG_DIR` 环境变量传递配置目录，DouYinRecorder 不依赖 shared 包）。
 
 ## 3.26.1-beta（2026-10-04）抖音风控加固二期
 
