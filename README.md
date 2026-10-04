@@ -119,6 +119,17 @@ GPLv3
 
 以下为本仓库在原项目基础上自行维护的改动记录（按版本倒序）。Docker 镜像同步发布至 DockerHub 与 GHCR（`ghcr.io/gitlawyercan/bililive-tools`）。
 
+## 3.26.1-beta（2026-10-04）抖音风控加固二期
+
+- **[feat] ttwid 改走官方注册接口 + ttwid 池化**（`packages/DouYinRecorder/src/ttwidPool.ts`、`douyin_api.ts`）
+  主力链路改为 `POST ttwid.bytedance.com/ttwid/union/register/`（aid=6383）服务端直接签发（真 token，365 天有效，实测 web/enter 直接成功且不强制 a_bogus）；旧"抓首页伪造 `__ac_signature`"链路降级为兜底。池内维持 2~3 个 token LRU + 12~36h 随机寿命轮换，防单 token 被打标。
+- **[feat] 冷却退避：接口级 + 房间级**（`loadBalancer.ts`、`index.ts`）
+  风控响应（10011/403/verify_required）不再等失败阈值，接口立即进入指数退避（1min→5min→30min，成功清零）；连续 3 轮检查全失败的房间跳约 2 轮检查（≥6 轮跳 5 轮），手动开始不受限。解决生产日志实锤的"限流后整轮全打、越打越糟"问题。
+- **[feat] 检查间隔随机抖动**（`manager.ts`）检查循环 ±25% 抖动、房间间 waitTime 0.5x~1.5x 随机，消除固定周期脚本时序指纹。
+- **[feat] mobile 接口补全 verifyFp+msToken**（`douyin_api.ts`）按 `s_v_web_id` 格式自造 + 116 位 msToken，24h 轮换，与全链路 UA 一致；对齐上游 PR #180 的三件套实现。
+- **[feat] TLS 观察哨 + 硬化预案**（`douyin_api.ts`）合法 ttwid 连续失败 ≥10 次告警提示 TLS 收紧；`DOUYIN_TLS_HARDEN=1` 可启用 Chrome 130 对齐的 https.Agent（默认关，实测家宽未被拦截）。
+- 验证脚本与实测记录见 CHANGELOG 3.26.1-beta；本版本仅发布 win-exe release，不出 docker 镜像。
+
 ## 3.25.1-fix3（2026-10-03）
 
 - **[fix] 视频合并：分组名已含「xxx：」前缀段时不再补前缀**（`packages/shared/src/task/videoGroupScan.ts`、`VideoMerge.vue`）

@@ -1,36 +1,41 @@
 import { URL, URLSearchParams } from "url";
+import https from "https";
 import axios from "axios";
 import { isEmpty } from "lodash-es";
 import { assert, get__ac_signature } from "./utils.js";
 import { ABogus } from "./sign.js";
+import {
+  getPooledTtwidCookie,
+  refillTtwidPoolInBackground,
+  getTtwidPoolStatus,
+} from "./ttwidPool.js";
+import { DOUYIN_UA, DOUYIN_CLIENT_HINTS, DOUYIN_DOCUMENT_HEADERS } from "./douyin_headers.js";
 import type { APIType, RoomInfo, RealAPIType } from "./types.js";
 
-/**
- * 全链路统一 UA（与 ABogus 内置 UA 严格一致）。
- * a_bogus 使用 UA 参与签名运算，签名时的 UA 与请求头 UA 必须完全相同；
- * 此前 axios 默认 119、userHTML/roomHTML 133 Edg、ABogus 130 Edg 三种混用，
- * 是典型的客户端指纹不一致特征。
- */
-const DOUYIN_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0";
+// 【#6 TLS 观察哨+预案】
+// 观察哨：web/enter 携带合法 ttwid 仍批量失败（403/空响应）时告警 —— 这是抖音
+// 收紧 TLS 指纹检测的信号，届时应启用下面的硬化开关。
+// 预案：设置环境变量 DOUYIN_TLS_HARDEN=1 后，请求走对齐 Chrome 的 https.Agent
+//（密码套件顺序 + ALPN）。注意 a_bogus 与 TLS 层无关，签名层无需改动。
+const TLS_HARDEN_ENABLED = process.env.DOUYIN_TLS_HARDEN === "1";
+let tlsWarnCounter = 0;
+let tlsWarnEmitted = false;
 
-/** Client Hints 请求头（sec-ch-ua 版本与 UA 中的 Chrome/Edge 版本严格一致） */
-const DOUYIN_CLIENT_HINTS = {
-  "sec-ch-ua": '"Microsoft Edge";v="130", "Chromium";v="130", "Not=A?Brand";v="24"',
-  "sec-ch-ua-mobile": "?0",
-  "sec-ch-ua-platform": '"Windows"',
-};
-
-/** 文档级导航请求头（访问 HTML 页面时使用） */
-const DOUYIN_DOCUMENT_HEADERS = {
-  Accept:
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-  "Upgrade-Insecure-Requests": "1",
-  "sec-fetch-dest": "document",
-  "sec-fetch-mode": "navigate",
-  "sec-fetch-user": "?1",
-  ...DOUYIN_CLIENT_HINTS,
-};
+// 【#6 TLS 观察哨】web/enter 携带合法 ttwid 仍连续失败 ≥10 次 → 告警一次。
+// 这是抖音收紧 TLS/JA3 检测的典型信号：签名与 cookie 都正常但握手被拒。
+// 处置：开启 DOUYIN_TLS_HARDEN=1（上面的硬化 Agent），或更换出口 IP 复测。
+function noteWebEnterFailureWithTtwid(): void {
+  tlsWarnCounter++;
+  if (tlsWarnCounter >= 10 && !tlsWarnEmitted) {
+    tlsWarnEmitted = true;
+    console.warn(
+      "[DouYin][TLS 观察哨] web/enter 携带合法 ttwid 已连续失败 %d 次（403/异常响应）。" +
+        "疑似抖音收紧了 TLS 指纹检测，建议：1) 设置 DOUYIN_TLS_HARDEN=1 启用硬化 Agent；" +
+        "2) 更换出口 IP 复测；3) 观察同 IP 下 B 站/其他平台是否正常以确认是抖音侧限制。",
+      tlsWarnCounter,
+    );
+  }
+}
 
 const requester = axios.create({
   timeout: 10e3,
@@ -40,6 +45,26 @@ const requester = axios.create({
   headers: {
     "User-Agent": DOUYIN_UA,
   },
+  ...(TLS_HARDEN_ENABLED
+    ? {
+        httpsAgent: new https.Agent({
+          ALPNProtocols: ["h2", "http/1.1"],
+          minVersion: "TLSv1.2",
+          // Chrome 130 常用套件顺序（尽力对齐，无法覆盖 JA3 全部维度）
+          ciphers: [
+            "TLS_AES_128_GCM_SHA256",
+            "TLS_AES_256_GCM_SHA384",
+            "TLS_CHACHA20_POLY1305_SHA256",
+            "ECDHE-ECDSA-AES128-GCM-SHA256",
+            "ECDHE-RSA-AES128-GCM-SHA256",
+            "ECDHE-ECDSA-AES256-GCM-SHA384",
+            "ECDHE-RSA-AES256-GCM-SHA384",
+            "ECDHE-ECDSA-CHACHA20-POLY1305",
+            "ECDHE-RSA-CHACHA20-POLY1305",
+          ].join(":"),
+        }),
+      }
+    : {}),
 });
 
 /**
@@ -104,7 +129,33 @@ let cookieCache: {
   cookies: string;
 };
 
-export const getCookie = async () => {
+/**
+ * 【#1 官方 ttwid 注册 + #4 ttwid 池】
+ * 优先走官方注册接口签发的 ttwid（真 token、365 天有效，池内 12~36h 抖动轮换），
+ * 失败时回退旧链路（抓首页 → __ac_signature → ttwid）。
+ *
+ * 2026-10 实测：官方 ttwid 调 webcast/room/web/enter 直接 status_code=0，
+ * 该接口不强制 a_bogus，ttwid cookie 是硬性要求。
+ */
+export const getCookie = async (): Promise<string> => {
+  try {
+    const cookie = await getPooledTtwidCookie();
+    // 后台补池（fire-and-forget），保持池中始终有 2~3 个可用 token
+    refillTtwidPoolInBackground();
+    return cookie;
+  } catch (error) {
+    console.warn(
+      "[DouYin][ttwidPool] 官方 ttwid 不可用，回退旧抓取链路:",
+      error instanceof Error ? error.message : error,
+    );
+    return getLegacyCookie();
+  }
+};
+
+/**
+ * 旧链路（保底）：请求首页从 set-cookie 换取含 ttwid 的 cookie 串
+ */
+const getLegacyCookie = async (): Promise<string> => {
   const now = new Date().getTime();
   // 缓存6小时
   if (cookieCache?.startTimestamp && now - cookieCache.startTimestamp < 6 * 60 * 60 * 1000) {
@@ -140,6 +191,9 @@ export const getCookie = async () => {
   };
   return cookies;
 };
+
+/** ttwid 池状态（诊断用） */
+export const describeTtwidPool = () => getTtwidPoolStatus();
 
 function generateNonce() {
   // 21味随机字母数字组合
@@ -415,22 +469,37 @@ async function getRoomInfoByWeb(
   const abogus = new ABogus();
   const [query, _, ua] = abogus.generateAbogus(new URLSearchParams(params).toString(), "");
 
-  const res = await requester.get<EnterRoomApiResp>(
-    `https://live.douyin.com/webcast/room/web/enter/?${query}`,
-    {
-      headers: {
-        cookie: cookies,
-        "User-Agent": ua,
-        // 页面内 XHR 请求的真实浏览器头部（a_bogus 只签 query + UA，补头不影响签名）
-        Referer: `https://live.douyin.com/${webRoomId}`,
-        Accept: "application/json, text/plain, */*",
-        "sec-fetch-dest": "empty",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-site": "same-origin",
-        ...DOUYIN_CLIENT_HINTS,
+  let res;
+  try {
+    res = await requester.get<EnterRoomApiResp>(
+      `https://live.douyin.com/webcast/room/web/enter/?${query}`,
+      {
+        headers: {
+          cookie: cookies,
+          "User-Agent": ua,
+          // 页面内 XHR 请求的真实浏览器头部（a_bogus 只签 query + UA，补头不影响签名）
+          Referer: `https://live.douyin.com/${webRoomId}`,
+          Accept: "application/json, text/plain, */*",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          ...DOUYIN_CLIENT_HINTS,
+        },
       },
-    },
-  );
+    );
+    // 【#6 TLS 观察哨】成功即清零计数
+    tlsWarnCounter = 0;
+  } catch (error) {
+    if (typeof cookies === "string" && cookies.includes("ttwid=")) {
+      noteWebEnterFailureWithTtwid();
+    }
+    throw error;
+  }
+  if (res.data.status_code !== 0 && res.data.status_code !== 30003) {
+    if (typeof cookies === "string" && cookies.includes("ttwid=")) {
+      noteWebEnterFailureWithTtwid();
+    }
+  }
   if (res.data.status_code === 30003) {
     // 直播已结束
     return {
@@ -472,6 +541,48 @@ async function getRoomInfoByWeb(
   };
 }
 
+// 【#5 msToken/verifyFp 指纹】
+// 2026-10 实测：reflow/info 带"登录 cookie 也返回 10011"，三件套不是限流的解药；
+// 但补全它们能消除"请求特征缺失"这一可被指纹化的弱点（上游 PR #180 的 mobile
+// 实现即 verifyFp + msToken + a_bogus 三件套思路）。指纹 24h 轮换，与 UA 严格一致。
+interface MobileFingerprint {
+  verifyFp: string;
+  msToken: string;
+  createdAt: number;
+}
+const MOBILE_FP_TTL = 24 * 60 * 60 * 1000;
+let mobileFingerprint: MobileFingerprint | null = null;
+
+/** s_v_web_id / verifyFp 标准格式（无签名校验，格式正确即可） */
+function genVerifyFp(): string {
+  const seg = (n: number) => {
+    const chars = "0123456789abcdefghijklmnopqrstuvwxyz";
+    let s = "";
+    for (let i = 0; i < n; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
+    return s;
+  };
+  return `verify_${seg(8)}_${seg(8)}_${seg(4)}_${seg(4)}_${seg(4)}_${seg(12)}`;
+}
+
+/** msToken：116 位随机串（真实浏览器中为服务端下发，此处自造并按时轮换） */
+function genMsToken(len = 116): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_=";
+  let s = "";
+  for (let i = 0; i < len; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
+  return s;
+}
+
+function getMobileFingerprint(): MobileFingerprint {
+  if (!mobileFingerprint || Date.now() - mobileFingerprint.createdAt > MOBILE_FP_TTL) {
+    mobileFingerprint = {
+      verifyFp: genVerifyFp(),
+      msToken: genMsToken(),
+      createdAt: Date.now(),
+    };
+  }
+  return mobileFingerprint;
+}
+
 async function getRoomInfoByMobile(
   secUserId: string | number,
   opts: {
@@ -485,12 +596,15 @@ async function getRoomInfoByMobile(
   if (typeof secUserId === "number") {
     throw new Error("Mobile API need secUserId string, please set uid field");
   }
+  // 【#5】补全 verifyFp + msToken（24h 轮换的持久化指纹），消除请求特征缺失
+  const fingerprint = getMobileFingerprint();
   const params: Record<any, any> = {
     app_id: 1128,
     live_id: 1,
-    verifyFp: "",
+    verifyFp: fingerprint.verifyFp,
     room_id: 2,
     type_id: 0,
+    msToken: fingerprint.msToken,
     sec_user_id: secUserId,
   };
 

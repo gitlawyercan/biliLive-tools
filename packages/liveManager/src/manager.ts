@@ -362,7 +362,8 @@ export function createRecorderManager<
             manager.emit("error", { source: "checkOnceInThread", err });
           } finally {
             if (providerConfig.waitTime > 0) {
-              await sleep(providerConfig.waitTime);
+              // 【#2 抖动】房间间等待时间同样随机化（0.5x ~ 1.5x），打散齐发节奏
+              await sleep(Math.round(providerConfig.waitTime * (0.5 + Math.random())));
             }
           }
         }
@@ -673,7 +674,11 @@ export function createRecorderManager<
               }
             } else {
               // 即使当前 provider 暂时没有 recorder，也保留轮询，避免后续新增 recorder 时漏掉自动检查。
-              const timer = setTimeout(checkLoop, providerConfig.autoCheckInterval);
+              // 【#2 检查间隔抖动】固定间隔请求是典型的脚本时序指纹，每轮在基准间隔上
+              // 加 ±25% 随机抖动，避免被平台按"精确周期"识别（多份风控资料均提及）。
+              const jitterFactor = 0.75 + Math.random() * 0.5; // 0.75 ~ 1.25
+              const interval = Math.round(providerConfig.autoCheckInterval * jitterFactor);
+              const timer = setTimeout(checkLoop, interval);
               checkLoopTimers.set(providerId, timer);
             }
           }

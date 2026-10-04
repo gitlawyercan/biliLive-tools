@@ -2,6 +2,26 @@ import type { APIType, APIEndpoint, APIEndpointStatus, LoadBalancerConfig } from
 import { getRoomInfo } from "../douyin_api.js";
 
 /**
+ * 【#3 冷却退避】风控响应识别
+ * 10011 = "Request params error / 服务繁忙"（2026-10 生产日志实锤：它不是参数错误，
+ * 而是服务端限流响应；触发后继续高频重试会加重风控等级）
+ */
+export function isRiskControlError(error: Error | string): boolean {
+  const msg = typeof error === "string" ? error : error.message;
+  if (!msg) return false;
+  return (
+    msg.includes("10011") ||
+    msg.includes("verify_required") ||
+    msg.includes("403") ||
+    msg.includes("当前服务繁忙") ||
+    msg.includes("Request params error")
+  );
+}
+
+/** 风控指数退避档位：1min → 5min → 30min（封顶） */
+const RISK_COOLDOWN_LADDER = [60e3, 5 * 60e3, 30 * 60e3];
+
+/**
  * API 负载均衡器类
  * 实现多个 API 接口的负载均衡调用，具备失败重试和禁用机制
  */
@@ -49,19 +69,28 @@ export class APILoadBalancer {
   private getNextEndpoint(): APIEndpointStatus | null {
     const now = Date.now();
 
-    // 清理过期的禁用状态
+    // 清理过期的禁用状态与过期的风控冷却
     this.endpoints.forEach((status) => {
       if (status.isBlocked && now >= status.nextRetryTime) {
         status.isBlocked = false;
         status.failureCount = Math.max(0, status.failureCount - 1); // 部分恢复
       }
+      if (status.riskCooldownUntil && now >= status.riskCooldownUntil) {
+        status.riskCooldownUntil = undefined;
+      }
     });
 
-    // 获取可用的端点
-    const availableEndpoints = this.endpoints.filter((status) => !status.isBlocked);
+    // 获取可用的端点（【#3】风控冷却中的接口不参与调度）
+    const availableEndpoints = this.endpoints.filter(
+      (status) => !status.isBlocked && !status.riskCooldownUntil,
+    );
 
     if (availableEndpoints.length === 0) {
-      return null; // 所有端点都被禁用
+      // 【#3】全部都在风控冷却中：取冷却剩余最短的一个保底，避免直接抛错导致整轮放弃
+      const cooling = this.endpoints
+        .filter((s) => s.riskCooldownUntil)
+        .sort((a, b) => (a.riskCooldownUntil ?? 0) - (b.riskCooldownUntil ?? 0));
+      return cooling[0] ?? null;
     }
 
     // 按优先级和权重排序
@@ -98,6 +127,19 @@ export class APILoadBalancer {
     status.failureCount++;
     status.lastFailureTime = Date.now();
 
+    // 【#3 冷却退避】风控响应不等 3 次阈值，立即进入指数退避冷却，
+    // 避免"限流后继续猛打 → 风控等级升级 → 所有接口全灭"的恶性循环
+    //（2026-10 生产日志实锤场景）。
+    if (isRiskControlError(error)) {
+      status.riskFailLevel = Math.min((status.riskFailLevel ?? 0) + 1, RISK_COOLDOWN_LADDER.length);
+      const delay = RISK_COOLDOWN_LADDER[Math.min(status.riskFailLevel - 1, RISK_COOLDOWN_LADDER.length - 1)];
+      status.riskCooldownUntil = Date.now() + delay;
+      console.warn(
+        `[DouYin][冷却退避] API ${apiType} 检测到风控响应(10011/403/verify_required)，进入冷却 ${Math.round(delay / 1000)}s（第 ${status.riskFailLevel} 级）`,
+      );
+      return;
+    }
+
     // 如果失败次数超过阈值，禁用该端点
     if (status.failureCount >= this.config.maxFailures) {
       status.isBlocked = true;
@@ -118,6 +160,12 @@ export class APILoadBalancer {
   private recordSuccess(apiType: APIType): void {
     const status = this.endpoints.find((s) => s.endpoint.name === apiType);
     if (!status) return;
+
+    // 【#3 冷却退避】成功一次立即清零风控状态，快速恢复满速调度
+    if (status.riskCooldownUntil || status.riskFailLevel) {
+      status.riskCooldownUntil = undefined;
+      status.riskFailLevel = 0;
+    }
 
     // 成功调用后，减少失败计数
     if (status.failureCount > 0) {
