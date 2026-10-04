@@ -17,12 +17,14 @@
  *    现按录制周期写盘（段开始、录制中每 QUOTA_FLUSH_INTERVAL_MS、段结束），
  *    重启后同 liveId 恢复已录时长、只录剩余时间；换场次/下播/手动开始时清除。
  *    崩溃前最后不足一个写盘周期的时间可能未落盘，恢复后至多多录约 1 分钟。
+ *
+ *    存储目录经环境变量 BILILIVE_CONFIG_DIR 获取（shared 包初始化 appConfig
+ *    时写入），本包不直接依赖 shared，避免跨包源码类型解析（arktype/strict
+ *    上下文冲突会让 tsgo 编译失败）。
  */
 
 import fs from "node:fs";
 import path from "node:path";
-
-import { appConfig } from "@biliLive-tools/shared/config.js";
 
 /** 停止原因，会出现在时间线与录制历史中 */
 export const LIMIT_STOP_REASON = "达到单场录制时长上限";
@@ -81,11 +83,11 @@ interface PersistedEntry {
 const persisted = new Map<string, PersistedEntry>();
 let storeLoaded = false;
 
-/** 存储文件路径；appConfig 未初始化（拿不到目录）时返回 null，持久化自动禁用 */
+/** 存储文件路径；环境变量未设置（appConfig 未初始化）时返回 null，持久化自动禁用 */
 function storeFilepath(): string | null {
-  const configPath = appConfig.filepath;
-  if (!configPath) return null;
-  return path.join(path.dirname(configPath), "douyin-quota-state.json");
+  const configDir = process.env.BILILIVE_CONFIG_DIR;
+  if (!configDir) return null;
+  return path.join(configDir, "douyin-quota-state.json");
 }
 
 /** 惰性加载磁盘额度记录；文件缺失或损坏时按无历史处理（等同旧版满额行为） */

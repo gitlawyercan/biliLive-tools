@@ -197,9 +197,6 @@ importers:
 
   packages/DouYinRecorder:
     dependencies:
-      '@biliLive-tools/shared':
-        specifier: workspace:^
-        version: link:../shared
       '@bililive-tools/manager':
         specifier: workspace:^
         version: link:../liveManager

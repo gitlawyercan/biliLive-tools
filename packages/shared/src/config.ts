@@ -89,6 +89,10 @@ export class AppConfig extends Config {
   }
   // 需要传递：{ffmpegPath:"",ffprobePath:"",tool:{download:{savePath:""}}}
   init(filepath: string, data: DeepPartial<AppConfigType> = {}) {
+    // 广播配置文件所在目录，供无法直接依赖本包的模块（如 DouYinRecorder 的
+    // 额度持久化）定位同目录存储文件，避免跨包源码类型解析
+    process.env.BILILIVE_CONFIG_DIR = path.dirname(filepath);
+
     APP_DEFAULT_CONFIG.tool.download.savePath = path.join(os.homedir(), "Downloads");
     APP_DEFAULT_CONFIG.recorder.savePath = path.join(os.homedir(), "Downloads");
     APP_DEFAULT_CONFIG.video.subSavePath = path.join(os.homedir(), "Downloads");

@@ -39,7 +39,6 @@
   "author": "WhiteMind",
   "license": "LGPL",
   "dependencies": {
-    "@biliLive-tools/shared": "workspace:^",
     "@bililive-tools/manager": "workspace:^",
     "axios": "catalog:",
     "douyin-danma-listener": "workspace:*",
