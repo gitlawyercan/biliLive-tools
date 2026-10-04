@@ -15,8 +15,7 @@ jobs:
 
     strategy:
       matrix:
-        # 3.26.1-beta 起：本仓库版本只构建 Windows（win-exe），不再构建 linux/macos 包
-        os: [windows-2022]
+        os: [windows-2022, ubuntu-22.04, macos-15]
 
     steps:
       - name: Check out Git repository
@@ -72,8 +71,7 @@ jobs:
           draft: false
           token: ${{ secrets.GITHUB_TOKEN }}
           artifactErrorsFailBuild: false
-          # 3.26.1-beta 起：release 只附带 win-exe（安装包 + portable），不含 linux/macos/CLI 包
-          artifacts: "packages/app/dist/*.exe"
+          artifacts: "packages/app/dist/*.exe,packages/app/dist/*.zip,packages/app/dist/*.deb,packages/app/dist/*.snap,packages/CLI/dist/*.zip,packages/app/dist/*.dmg"
           replacesArtifacts: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
