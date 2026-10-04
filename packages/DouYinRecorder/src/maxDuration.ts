@@ -19,6 +19,11 @@
  *    崩溃前最后不足一个写盘周期的时间可能未落盘，恢复后至多多录约 1 分钟。
  */
 
+import fs from "node:fs";
+import path from "node:path";
+
+import { appConfig } from "@biliLive-tools/shared/config.js";
+
 /** 停止原因，会出现在时间线与录制历史中 */
 export const LIMIT_STOP_REASON = "达到单场录制时长上限";
 

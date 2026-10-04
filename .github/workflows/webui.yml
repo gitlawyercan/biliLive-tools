@@ -1,10 +1,8 @@
 name: build and push webui
 
 on:
-  push:
-    tags:
-      - "*"
   workflow_dispatch:
+    # 3.26.2-fix1 起：tag push 不再自动构建 webui，仅手动触发
 
 jobs:
   release:

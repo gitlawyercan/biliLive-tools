@@ -1,7 +1,9 @@
 name: Publish to npm
 
-# 3.26.1-beta 起：仅手动触发，tag push 不再自动发布 npm（beta 版本不出 npm 包）
 on:
+  push:
+    tags:
+      - "*"
   workflow_dispatch:
 
 jobs:
