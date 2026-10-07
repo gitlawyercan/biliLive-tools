@@ -356,6 +356,9 @@ export const APP_DEFAULT_CONFIG: AppConfig = {
   recorder: {
     savePath: "",
     nameRule: "{platform}/{owner}/{year}-{month}-{date} {hour}-{min}-{sec}-{ms} {title}",
+    timeBatchEnabled: false,
+    timeBatchFirstStart: "06:00",
+    timeBatchSecondStart: "17:00",
     autoRecord: true,
     quality: "highest",
     line: undefined,

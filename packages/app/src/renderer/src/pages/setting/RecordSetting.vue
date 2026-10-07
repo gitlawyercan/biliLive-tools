@@ -50,6 +50,31 @@
           <n-form-item>
             <template #label>
               <Tip
+                text="批次归类"
+                tip="按<b>录制开始时间</b>把录制文件归入「2026年10月7日第二批」这样的文件夹。<br/>第一批 = [第一批起始, 第二批起始)，归属日 = 当天；第二批 = [第二批起始, 次日第一批起始)，归属日 = 前一天。<br/>例如第一批 06:00、第二批 17:00：10月7日17点至10月8日6点之间开始录制的直播 → 10月7日第二批；10月8日6点至17点开始 → 10月8日第一批，跨年同理回退到上一年。<br/>一场直播无论录多久、是否跨批次边界或午夜，都只会落在同一个批次文件夹里。<br/>两个时间填反时会自动按「早的为第一批、晚的为第二批」纠正。<br/><b>开启后还需在「文件命名规则」中加入 {batch} 才会生效</b>。"
+              ></Tip>
+            </template>
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px">
+              <n-switch v-model:value="config.recorder.timeBatchEnabled" />
+              <template v-if="config.recorder.timeBatchEnabled">
+                <n-time-picker
+                  v-model:formatted-value="config.recorder.timeBatchFirstStart"
+                  format="HH:mm"
+                  style="width: 130px"
+                />
+                <span>至</span>
+                <n-time-picker
+                  v-model:formatted-value="config.recorder.timeBatchSecondStart"
+                  format="HH:mm"
+                  style="width: 130px"
+                />
+                <span style="color: #999">第一批起始 ~ 第二批起始（左侧为 06:00、右侧为 17:00 时，17 点至次日 6 点开录的直播归入前一天的第二批）</span>
+              </template>
+            </div>
+          </n-form-item>
+          <n-form-item>
+            <template #label>
+              <Tip
                 :tip="textInfo.common.checkInterval.tip"
                 :text="textInfo.common.checkInterval.text"
               ></Tip>
@@ -879,7 +904,7 @@ const selectFolder = async () => {
   if (!file) return;
   config.value.recorder.savePath = file;
 };
-const titleList = ref([
+const baseTitleList = [
   {
     value: "{platform}",
     label: "平台",
@@ -928,7 +953,19 @@ const titleList = ref([
     value: "{ms}",
     label: "毫秒",
   },
-]);
+];
+// 批次相关占位符只在开启批次归类后展示，避免误用
+const batchTitleList = [
+  { value: "{batch}", label: "批次文件夹名，如 2026年10月7日第二批" },
+  { value: "{batchName}", label: "批次名，如 第一批 / 第二批" },
+  { value: "{batchIndex}", label: "批次序号，如 1 / 2" },
+  { value: "{batchYear}", label: "批次归属日年份，如 2026" },
+  { value: "{batchMonth}", label: "批次归属日月份，如 10" },
+  { value: "{batchDate}", label: "批次归属日日期，如 7" },
+];
+const titleList = computed(() =>
+  config.value.recorder.timeBatchEnabled ? [...baseTitleList, ...batchTitleList] : baseTitleList,
+);
 const titleTip = computed(() => {
   const base = `<b>谨慎修改，可能会导致无法录制</b><br/>支持ejs引擎，更多参数见文档<br/>`;
   return titleList.value

@@ -453,6 +453,18 @@ export interface GlobalRecorder {
   savePath: string;
   /** 命名规则 */
   nameRule: string;
+  /**
+   * 是否启用「按批次日期归类录制文件夹」
+   *
+   * 开启后可在命名规则里使用 {batch} 等占位符，把一场直播的文件归入
+   * 「2026年10月7日第二批」这样的目录。批次以**录制开始时间**判定：
+   * 第一批 [第一批起始, 第二批起始)，第二批 [第二批起始, 次日第一批起始) 且归属前一天。
+   */
+  timeBatchEnabled?: boolean;
+  /** 第一批起始时间，如 06:00 */
+  timeBatchFirstStart?: string;
+  /** 第二批起始时间，如 17:00 */
+  timeBatchSecondStart?: string;
   /** 自动录制 */
   autoRecord: boolean;
   /** 检查间隔 */

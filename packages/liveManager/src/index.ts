@@ -13,7 +13,15 @@ export * from "./cache.js";
 export * from "./downloader/FFmpegDownloader.js";
 export { createDownloader } from "./downloader/index.js";
 export type { VideoFileCreatedPayload } from "./downloader/IDownloader.js";
-export { checkTitleKeywordsWhileRecording, checkTitleKeywordsBeforeRecord } from "./utils.js";
+export {
+  checkTitleKeywordsWhileRecording,
+  checkTitleKeywordsBeforeRecord,
+  getTimeBatchInfo,
+  parseClockToMinutes,
+  DEFAULT_TIME_BATCH_FIRST_START,
+  DEFAULT_TIME_BATCH_SECOND_START,
+} from "./utils.js";
+export type { TimeBatchConfig, TimeBatchInfo } from "./utils.js";
 export { utils };
 
 /**

@@ -28,7 +28,11 @@ import {
   isBetweenTimeRange,
   sleep,
   replaceFourByteUnicode,
+  getTimeBatchInfo,
+  DEFAULT_TIME_BATCH_FIRST_START,
+  DEFAULT_TIME_BATCH_SECOND_START,
 } from "./utils.js";
+import type { TimeBatchConfig } from "./utils.js";
 import { StreamManager } from "./downloader/streamManager.js";
 
 export interface ProviderCheckConfig {
@@ -160,6 +164,7 @@ const configurableProps = [
   "biliBatchQuery",
   "recordRetryImmediately",
   "providerCheckConfig",
+  "timeBatchConfig",
 ] as const;
 type ConfigurableProp = (typeof configurableProps)[number];
 function isConfigurableProp(prop: unknown): prop is ConfigurableProp {
@@ -232,6 +237,8 @@ export interface RecorderManager<
   savePathRule: string;
   autoRemoveSystemReservedChars: boolean;
   ffmpegOutputArgs: string;
+  /** 录制文件按「批次日期」归类到文件夹的配置 */
+  timeBatchConfig: TimeBatchConfig;
   /** b站使用批量查询接口 */
   biliBatchQuery: boolean;
   /** 下播延迟检查 */
@@ -716,6 +723,12 @@ export function createRecorderManager<
     biliBatchQuery: opts.biliBatchQuery ?? false,
     recordRetryImmediately: opts.recordRetryImmediately ?? false,
 
+    timeBatchConfig: opts.timeBatchConfig ?? {
+      enabled: false,
+      firstStart: DEFAULT_TIME_BATCH_FIRST_START,
+      secondStart: DEFAULT_TIME_BATCH_SECOND_START,
+    },
+
     cache: opts.cache ?? new RecorderCacheImpl(new MemoryCacheStore()),
 
     providerCheckConfig: opts.providerCheckConfig ?? {},
@@ -791,6 +804,12 @@ export function genSavePathFromRule<
   const title = removeSystemReservedChars((extData?.title ?? "").replaceAll("%", "_"));
   const remarks = removeSystemReservedChars((recorder.remarks ?? "").replaceAll("%", "_"));
   const channelId = removeSystemReservedChars(String(recorder.channelId));
+  // 批次归属以「本次录制的开始时间」为准（而不是每个分片的时刻），
+  // 这样一场直播即使跨过批次边界或午夜，文件也会始终落在同一个批次文件夹里
+  const batchInfo = getTimeBatchInfo(
+    extData?.recordStartTime ?? extData?.liveStartTime ?? now,
+    manager.timeBatchConfig,
+  );
   const params = {
     platform: provider?.name ?? "unknown",
     year: formatDate(now, "yyyy"),
@@ -800,6 +819,19 @@ export function genSavePathFromRule<
     min: formatDate(now, "mm"),
     sec: formatDate(now, "ss"),
     ms: formatDate(now, "SSS"),
+    // 批次相关占位符：未启用时为 undefined，formatTemplate 会替换成空串
+    /** 批次文件夹名，如 2026年10月7日第二批 */
+    batch: batchInfo?.folderName,
+    /** 批次名，如 第二批 */
+    batchName: batchInfo?.name,
+    /** 批次序号，1 = 第一批，2 = 第二批 */
+    batchIndex: batchInfo?.index,
+    /** 批次归属日年份，如 2026 */
+    batchYear: batchInfo?.year,
+    /** 批次归属日月份，不补零，如 10 */
+    batchMonth: batchInfo?.month,
+    /** 批次归属日日期，不补零，如 7 */
+    batchDate: batchInfo?.date,
     ...extData,
     startTime: now,
     owner: owner,

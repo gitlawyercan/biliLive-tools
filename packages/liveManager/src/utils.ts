@@ -219,6 +219,97 @@ export const formatTemplate = function template(string: string, ...args: any[]) 
   });
 };
 
+/** 批次归类的默认边界：第一批 06:00 开始、第二批 17:00 开始 */
+export const DEFAULT_TIME_BATCH_FIRST_START = "06:00";
+export const DEFAULT_TIME_BATCH_SECOND_START = "17:00";
+
+export interface TimeBatchConfig {
+  /** 是否启用按批次日期归类文件夹 */
+  enabled: boolean;
+  /** 第一批起始时间，如 06:00 */
+  firstStart: string;
+  /** 第二批起始时间，如 17:00 */
+  secondStart: string;
+}
+
+export interface TimeBatchInfo {
+  /** 1 = 第一批，2 = 第二批 */
+  index: 1 | 2;
+  /** 第一批 / 第二批 */
+  name: string;
+  /** 归属日（凌晨时段会回退到前一天） */
+  time: Date;
+  year: string;
+  month: string;
+  date: string;
+  /** 默认文件夹名，如 2026年10月7日第二批 */
+  folderName: string;
+}
+
+/**
+ * 解析 "HH:mm" / "H:mm" / "HH:mm:ss" 为当天零点起的分钟数，非法返回 null
+ */
+export function parseClockToMinutes(value: string | undefined | null): number | null {
+  if (typeof value !== "string") return null;
+  const matched = value.trim().match(/^(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?$/);
+  if (!matched) return null;
+  const hour = Number(matched[1]);
+  const minute = matched[2] === undefined ? 0 : Number(matched[2]);
+  if (hour > 23 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
+/**
+ * 计算某个时刻所属的「批次」，用于把录制文件归类到「2026年10月7日第二批」这类文件夹
+ *
+ * 以 firstStart=06:00、secondStart=17:00 为例：
+ * - 第一批 [06:00, 17:00)     → 归属日 = 当天
+ * - 第二批 [17:00, 次日06:00) → 归属日 = 前一天
+ *
+ * 即 17:00 开播、次日 06:00 下播的直播会整体归入前一天的「第二批」文件夹；
+ * 跨批次边界或跨午夜的长录制也不会中途换目录（判定时间固定用录制开始时间）。
+ *
+ * 未启用 / 两个边界相同（无法划分）时返回 null，表示不做批次归类。
+ */
+export function getTimeBatchInfo(time: Date, config?: TimeBatchConfig): TimeBatchInfo | null {
+  if (!config?.enabled) return null;
+  let firstStart =
+    parseClockToMinutes(config.firstStart) ?? parseClockToMinutes(DEFAULT_TIME_BATCH_FIRST_START)!;
+  let secondStart =
+    parseClockToMinutes(config.secondStart) ?? parseClockToMinutes(DEFAULT_TIME_BATCH_SECOND_START)!;
+  if (firstStart === secondStart) return null;
+  // 容错：两个边界填反时（第二个早于第一个）自动交换，
+  // 保证「第二批」始终是跨零点的夜班（如填 20:00 / 04:00 等同于 04:00 / 20:00）
+  if (firstStart > secondStart) {
+    [firstStart, secondStart] = [secondStart, firstStart];
+  }
+
+  const batchTime = new Date(time.getTime());
+  const minutes = batchTime.getHours() * 60 + batchTime.getMinutes();
+
+  let index: 1 | 2;
+  if (minutes >= secondStart) index = 2;
+  else if (minutes >= firstStart) index = 1;
+  else index = 2; // 凌晨时段属于前一天开启的第二批
+
+  // 凌晨时段（如 00:00~06:00）归属到前一天
+  if (index === 2 && minutes < secondStart) batchTime.setDate(batchTime.getDate() - 1);
+
+  const name = index === 1 ? "第一批" : "第二批";
+  const year = String(batchTime.getFullYear());
+  const month = String(batchTime.getMonth() + 1);
+  const date = String(batchTime.getDate());
+  return {
+    index,
+    name,
+    time: batchTime,
+    year,
+    month,
+    date,
+    folderName: `${year}年${month}月${date}日${name}`,
+  };
+}
+
 /**
  * 检查ffmpeg无效流
  * @param count 连续多少次帧数不变就判定为无效流

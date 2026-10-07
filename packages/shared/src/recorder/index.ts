@@ -16,6 +16,8 @@ import {
   setMesioPath,
   setBililivePath,
   utils,
+  DEFAULT_TIME_BATCH_FIRST_START,
+  DEFAULT_TIME_BATCH_SECOND_START,
 } from "@bililive-tools/manager";
 
 import recordHistory from "./recordHistory.js";
@@ -37,7 +39,7 @@ import type {
   Recorder as RecorderConfigType,
   AppConfig as AppConfigType,
 } from "@biliLive-tools/types";
-import type { Recorder, ResolveChannelOptions } from "@bililive-tools/manager";
+import type { Recorder, ResolveChannelOptions, TimeBatchConfig } from "@bililive-tools/manager";
 
 export { RecorderConfig };
 
@@ -247,6 +249,17 @@ export async function createRecorderManager(appConfig: AppConfig) {
   }
 
   /**
+   * 把全局配置里的批次边界转换成 manager 使用的结构
+   */
+  function buildTimeBatchConfig(config: AppConfigType): TimeBatchConfig {
+    return {
+      enabled: config?.recorder?.timeBatchEnabled ?? false,
+      firstStart: config?.recorder?.timeBatchFirstStart || DEFAULT_TIME_BATCH_FIRST_START,
+      secondStart: config?.recorder?.timeBatchSecondStart || DEFAULT_TIME_BATCH_SECOND_START,
+    };
+  }
+
+  /**
    * 构建manager配置项
    */
   async function buildManagerOptions(config: AppConfigType) {
@@ -308,6 +321,7 @@ export async function createRecorderManager(appConfig: AppConfig) {
       autoRemoveSystemReservedChars: true,
       autoCheckInterval: autoCheckInterval * 1000,
       savePathRule: savePathRule,
+      timeBatchConfig: buildTimeBatchConfig(config),
       biliBatchQuery: config?.recorder?.bilibili.useBatchQuery ?? false,
       recordRetryImmediately: config?.recorder?.recordRetryImmediately ?? false,
       maxThreadCount: maxThreadCount,
@@ -334,6 +348,7 @@ export async function createRecorderManager(appConfig: AppConfig) {
     manager.maxThreadCount = maxThreadCount;
     manager.waitTime = waitTime;
     manager.savePathRule = savePathRule;
+    manager.timeBatchConfig = buildTimeBatchConfig(config);
     manager.biliBatchQuery = config?.recorder?.bilibili.useBatchQuery ?? false;
     manager.recordRetryImmediately = config?.recorder?.recordRetryImmediately ?? false;
 
