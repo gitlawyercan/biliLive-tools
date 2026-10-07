@@ -81,6 +81,14 @@ const router = createRouter({
           },
         },
         {
+          path: "/timeBatchArchive",
+          name: "TimeBatchArchive",
+          component: () => import("../pages/Tools/pages/TimeBatchArchive.vue"),
+          meta: {
+            title: "批次归档",
+          },
+        },
+        {
           path: "/biliDownload",
           name: "BiliDownload",
           component: () => import("../pages/Tools/pages/Video/index.vue"),

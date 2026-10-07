@@ -57,6 +57,7 @@
               'Convert2Mp4',
               'VideoMerge',
               'FlvRepair',
+              'TimeBatchArchive',
               'BiliDownload',
               'recorder',
               'videoCut',
@@ -403,6 +404,19 @@ const menuOptions = computed<MenuOption[]>(() => {
             },
           },
           { default: () => "FLV修复" },
+        ),
+    },
+    {
+      key: "TimeBatchArchive",
+      label: () =>
+        h(
+          RouterLink,
+          {
+            to: {
+              name: "TimeBatchArchive",
+            },
+          },
+          { default: () => "批次归档" },
         ),
     },
   ];

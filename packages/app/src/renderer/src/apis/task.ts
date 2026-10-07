@@ -168,6 +168,48 @@ const mergeVideoGroups = async (data: {
   return res.data;
 };
 
+export type TimeBatchArchiveStatus = "ready" | "inBatchDir" | "unrecognized" | "conflict" | "recent";
+
+export interface TimeBatchArchiveItem {
+  path: string;
+  name: string;
+  sizeBytes: number;
+  recordTime: number | null;
+  batchFolder: string | null;
+  targetPath: string | null;
+  status: TimeBatchArchiveStatus;
+  reason?: string;
+}
+
+export interface TimeBatchArchiveOptions {
+  inputDir: string;
+  recursive?: boolean;
+  excludeDirs?: string[];
+  recentMinutes?: number;
+}
+
+/** 扫描目录生成批次归档计划（不移动文件） */
+const scanTimeBatchArchive = async (
+  options: TimeBatchArchiveOptions,
+): Promise<{
+  items: TimeBatchArchiveItem[];
+  timeBatch: { firstStart: string; secondStart: string; enabled: boolean };
+}> => {
+  const res = await request.post(`/task/scanTimeBatchArchive`, options);
+  return res.data;
+};
+
+/** 执行批次归档：后端重新扫描后移动可归档文件 */
+const runTimeBatchArchive = async (
+  options: TimeBatchArchiveOptions,
+): Promise<{
+  results: { path: string; target?: string; batchFolder?: string | null; historyUpdated?: boolean; error?: string }[];
+  timeBatch: { firstStart: string; secondStart: string; enabled: boolean };
+}> => {
+  const res = await request.post(`/task/runTimeBatchArchive`, options);
+  return res.data;
+};
+
 const transcode = async (
   input: string,
   /** 包含后缀 */
@@ -422,6 +464,8 @@ const task = {
   checkMergeVideos,
   scanVideoGroups,
   mergeVideoGroups,
+  scanTimeBatchArchive,
+  runTimeBatchArchive,
   addExtraVideoTask,
   downloadFile,
   editVideoPartName,

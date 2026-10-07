@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { streamerService, recordHistoryService } from "../db/index.js";
 
 import type { BaseLiveHistory, LiveHistory } from "../db/model/recordHistory.js";
@@ -79,6 +81,21 @@ export function upadteLive(
   }
 
   return null;
+}
+
+/**
+ * 录制文件被移动/重命名后同步修正历史记录里的绝对路径
+ *
+ * video_file 字段是历史记录「打开文件 / 打开文件夹 / 播放」的取用依据，
+ * 路径失效后接口只会返回 null，前端静默无反应，因此文件移动后必须同步改库。
+ * @returns 是否命中并更新了记录
+ */
+export function updateVideoFilePath(oldPath: string, newPath: string): boolean {
+  if (!oldPath || !newPath || path.resolve(oldPath) === path.resolve(newPath)) return false;
+  const live = recordHistoryService.query({ video_file: oldPath });
+  if (!live) return false;
+  recordHistoryService.update({ id: live.id, video_file: newPath });
+  return true;
 }
 
 export function queryRecordsByRoomAndPlatform(options: QueryRecordsOptions): QueryRecordsResult {

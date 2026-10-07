@@ -28,6 +28,10 @@ import {
   scanVideoGroups,
   buildOutputBase,
 } from "@biliLive-tools/shared/task/videoGroupScan.js";
+import {
+  scanTimeBatchArchive,
+  runTimeBatchArchive,
+} from "@biliLive-tools/shared/task/timeBatchArchive.js";
 import { biliApi, validateBiliupConfig } from "@biliLive-tools/shared/task/bili.js";
 import {
   trashItem,
@@ -327,6 +331,53 @@ router.post("/mergeVideoGroups", async (ctx) => {
     }
   }
   ctx.body = { results };
+});
+
+/**
+ * 录制文件按批次日期归档：扫描目录生成归档计划（不移动文件）
+ */
+router.post("/scanTimeBatchArchive", async (ctx) => {
+  const { inputDir, recursive, excludeDirs, recentMinutes } = (ctx.request.body ?? {}) as {
+    inputDir?: string;
+    recursive?: boolean;
+    excludeDirs?: string[];
+    recentMinutes?: number;
+  };
+  if (!inputDir) {
+    ctx.status = 400;
+    ctx.body = "inputDir is required";
+    return;
+  }
+  try {
+    ctx.body = await scanTimeBatchArchive({ inputDir, recursive, excludeDirs, recentMinutes });
+  } catch (error) {
+    ctx.status = 400;
+    ctx.body = error instanceof Error ? error.message : String(error);
+  }
+});
+
+/**
+ * 执行批次归档：后端按目录重新扫描后移动「可归档」的文件
+ * 不接受前端传入的文件列表，避免构造请求移动任意路径
+ */
+router.post("/runTimeBatchArchive", async (ctx) => {
+  const { inputDir, recursive, excludeDirs, recentMinutes } = (ctx.request.body ?? {}) as {
+    inputDir?: string;
+    recursive?: boolean;
+    excludeDirs?: string[];
+    recentMinutes?: number;
+  };
+  if (!inputDir) {
+    ctx.status = 400;
+    ctx.body = "inputDir is required";
+    return;
+  }
+  try {
+    ctx.body = await runTimeBatchArchive({ inputDir, recursive, excludeDirs, recentMinutes });
+  } catch (error) {
+    ctx.status = 400;
+    ctx.body = error instanceof Error ? error.message : String(error);
+  }
 });
 
 router.post("/mergeVideo", async (ctx) => {
