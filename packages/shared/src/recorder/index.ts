@@ -260,10 +260,28 @@ export async function createRecorderManager(appConfig: AppConfig) {
   }
 
   /**
+   * 拼接「保存根目录 + 文件命名规则」模板串
+   *
+   * 开启批次归类后，若命名规则里没有自行写 {batch}，就在保存根目录下自动挂一层
+   * 批次目录（保存根目录/2026年10月7日第二批/平台/主播/文件名），这样启用该功能
+   * 不需要改动既有文件命名规则；若命名规则已包含 {batch} 则不重复插入，
+   * 保持用户自定义的目录层级。
+   */
+  function buildSavePathRule(config: AppConfigType): string {
+    const savePath = config?.recorder?.savePath ?? "";
+    const nameRule = config?.recorder?.nameRule ?? "";
+    const hasBatchPlaceholder = nameRule.includes("{batch}");
+    if (config?.recorder?.timeBatchEnabled && !hasBatchPlaceholder) {
+      return path.join(savePath, "{batch}", nameRule);
+    }
+    return path.join(savePath, nameRule);
+  }
+
+  /**
    * 构建manager配置项
    */
   async function buildManagerOptions(config: AppConfigType) {
-    const savePathRule = path.join(config?.recorder?.savePath, config?.recorder?.nameRule);
+    const savePathRule = buildSavePathRule(config);
     const autoCheckInterval = config?.recorder?.checkInterval ?? 60;
     const maxThreadCount = config?.recorder?.maxThreadCount ?? 3;
     const waitTime = config?.recorder?.waitTime ?? 0;
@@ -338,7 +356,7 @@ export async function createRecorderManager(appConfig: AppConfig) {
     appConfig: AppConfig,
   ) {
     const config = appConfig.getAll();
-    const savePathRule = path.join(config?.recorder?.savePath, config?.recorder?.nameRule);
+    const savePathRule = buildSavePathRule(config);
     const autoCheckInterval = config?.recorder?.checkInterval ?? 60;
     const maxThreadCount = config?.recorder?.maxThreadCount ?? 3;
     const waitTime = config?.recorder?.waitTime ?? 0;
