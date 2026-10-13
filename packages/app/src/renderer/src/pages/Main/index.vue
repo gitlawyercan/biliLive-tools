@@ -407,6 +407,19 @@ const menuOptions = computed<MenuOption[]>(() => {
         ),
     },
     {
+      key: "BatchRenameArchive",
+      label: () =>
+        h(
+          RouterLink,
+          {
+            to: {
+              name: "BatchRenameArchive",
+            },
+          },
+          { default: () => "批量改名" },
+        ),
+    },
+    {
       key: "TimeBatchArchive",
       label: () =>
         h(

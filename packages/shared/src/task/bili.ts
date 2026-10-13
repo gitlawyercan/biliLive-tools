@@ -995,6 +995,143 @@ async function editVideoPartName(taskId: string, partName: string) {
 }
 
 /**
+ * 批量修改稿件名称的条目
+ */
+export type ArchiveRenameItem = {
+  /** 稿件 aid */
+  aid: number;
+  /** 稿件 bvid（若有） */
+  bvid?: string;
+  /** 原标题 */
+  title: string;
+  /** 新标题 */
+  newTitle: string;
+};
+
+export type ArchiveRenameResult = {
+  aid: number;
+  title: string;
+  success: boolean;
+  error?: string;
+  /** 实际等待的毫秒数，便于复盘节奏 */
+  waited?: number;
+};
+
+/**
+ * 在给定区间内取一个随机值（风控规避用）
+ */
+function randomDelay(min: number, max: number) {
+  const lo = Math.max(0, Math.min(min, max));
+  const hi = Math.max(0, Math.max(min, max));
+  return Math.floor(lo + Math.random() * (hi - lo + 1));
+}
+
+/**
+ * 修改单个稿件的标题
+ *
+ * 说明：走 x/vu/web/edit 接口时需要带上稿件原有的全量字段（分区、标签、简介、
+ * 封面、分P 等），否则会把稿件信息清空。因此这里先 getArchive 拉取原始稿件，
+ * 仅覆盖 title 后回写，videos 直接沿用原 cid 列表，保持分P 不变。
+ */
+async function renameArchive(client: ClientInstance, item: ArchiveRenameItem): Promise<void> {
+  const { aid, newTitle } = item;
+  const title = newTitle.trim();
+  if (!title) throw new Error("标题不能为空");
+  if (title.length > 80) throw new Error("标题不能超过80个字符");
+
+  const archive = await client.platform.getArchive({ aid });
+  const archiveData: Record<string, any> = { ...(archive.archive as any) };
+  // 这些字段回传会导致接口报错，与 bili-api 内部的处理保持一致
+  for (const key of ["recreate", "human_type2", "activity", "attrs", "tp_info"]) {
+    delete archiveData[key];
+  }
+
+  // 沿用原分P，仅覆盖标题
+  const videos = (archive.videos || []).map((v: any) => ({
+    cid: v.cid,
+    filename: v.filename,
+    title: v.title,
+    desc: v.desc ?? "",
+  }));
+
+  // editMediaWebApi 内部会自行取 csrf 并把 desc_v2 转成 desc，这里只覆盖标题
+  await client.platform.editMediaWebApi(
+    videos as any,
+    {
+      ...archiveData,
+      aid,
+      title,
+    } as any,
+    "replace",
+  );
+  log.info(`稿件 ${aid} 名称已修改为「${title}」`);
+}
+
+/**
+ * 批量修改稿件名称
+ *
+ * 为了避免触发 B 站风控，采用串行 + 随机间隔的方式逐个提交：
+ * 每次请求成功后，随机等待 [minIntervalMs, maxIntervalMs] 再处理下一个。
+ * 单个稿件失败不中断整体流程，失败原因记录在结果中。
+ *
+ * @param items 待修改的稿件列表
+ * @param uid 目标用户 uid
+ * @param options.minIntervalMs 两次请求之间的最小间隔，默认 8 秒
+ * @param options.maxIntervalMs 两次请求之间的最大间隔，默认 20 秒
+ * @param options.onProgress 每处理完一个条目的回调，用于向前端推进度
+ */
+async function batchRenameArchives(
+  items: ArchiveRenameItem[],
+  uid: number,
+  options?: {
+    minIntervalMs?: number;
+    maxIntervalMs?: number;
+    onProgress?: (done: number, total: number, result: ArchiveRenameResult) => void;
+  },
+) {
+  const minIntervalMs = options?.minIntervalMs ?? 8000;
+  const maxIntervalMs = options?.maxIntervalMs ?? 20000;
+
+  const client = createClient(uid);
+  await client.auth.authLogin();
+
+  const results: ArchiveRenameResult[] = [];
+  const total = items.length;
+
+  for (let i = 0; i < total; i++) {
+    const item = items[i];
+    let result: ArchiveRenameResult;
+    try {
+      await renameArchive(client, item);
+      result = { aid: item.aid, title: item.newTitle.trim(), success: true };
+      log.info(`批量改名 ${i + 1}/${total}：稿件 ${item.aid} → 「${item.newTitle}」`);
+    } catch (e: any) {
+      const message = e?.message || String(e);
+      result = { aid: item.aid, title: item.newTitle.trim(), success: false, error: message };
+      log.error(`批量改名 ${i + 1}/${total} 失败：稿件 ${item.aid}`, message);
+    }
+    results.push(result);
+    options?.onProgress?.(i + 1, total, result);
+
+    // 最后一个条目之后不再等待
+    if (i < total - 1) {
+      const wait = randomDelay(minIntervalMs, maxIntervalMs);
+      result.waited = wait;
+      log.info(`风控规避：等待 ${(wait / 1000).toFixed(1)}s 后处理下一个稿件`);
+      await sleep(wait);
+    }
+  }
+
+  const failed = results.filter((r) => !r.success).length;
+  return {
+    total,
+    success: results.length - failed,
+    failed,
+    results,
+  };
+}
+
+/**
  * 查询视频状态
  */
 async function queryVideoStatus(taskId: string) {
@@ -1360,6 +1497,7 @@ export async function getStaffRemaining(uid: number) {
 
 export const biliApi = {
   getArchives,
+  batchRenameArchives,
   checkTag,
   searchTopic,
   login,

@@ -40,6 +40,42 @@ router.get("/archives", async (ctx) => {
 });
 
 /**
+ * 批量修改稿件名称（串行 + 随机间隔，避免触发风控）
+ */
+router.post("/batchRenameArchives", async (ctx) => {
+  const data = ctx.request.body as {
+    uid: number;
+    items: { aid: number; title: string; newTitle: string }[];
+    options?: { minIntervalMs?: number; maxIntervalMs?: number };
+  };
+
+  const { uid, items } = data;
+  if (!uid) {
+    ctx.body = "uid required";
+    ctx.status = 400;
+    return;
+  }
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    ctx.body = "items required";
+    ctx.status = 400;
+    return;
+  }
+  // 只处理真正改名了的条目，标题为空或与原标题一致的直接跳过
+  const targets = items.filter((i) => i.aid && i.newTitle && i.newTitle.trim());
+  if (targets.length === 0) {
+    ctx.body = { total: 0, success: 0, failed: 0, results: [] };
+    return;
+  }
+
+  console.log(`批量改名：共 ${targets.length} 个稿件待处理`);
+  const res = await biliApi.batchRenameArchives(targets, uid, {
+    minIntervalMs: data.options?.minIntervalMs,
+    maxIntervalMs: data.options?.maxIntervalMs,
+  });
+  ctx.body = res;
+});
+
+/**
  * 用户视频详情
  */
 router.get("/user/archive/:bvid", async (ctx) => {

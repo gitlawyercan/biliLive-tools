@@ -81,6 +81,14 @@ const router = createRouter({
           },
         },
         {
+          path: "/batchRenameArchive",
+          name: "BatchRenameArchive",
+          component: () => import("../pages/Tools/pages/BatchRenameArchive.vue"),
+          meta: {
+            title: "批量改名",
+          },
+        },
+        {
           path: "/timeBatchArchive",
           name: "TimeBatchArchive",
           component: () => import("../pages/Tools/pages/TimeBatchArchive.vue"),

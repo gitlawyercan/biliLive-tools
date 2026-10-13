@@ -28,6 +28,42 @@ const getArchiveDetail = async (
   return res.data;
 };
 
+export type BatchRenameArchiveItem = {
+  aid: number;
+  bvid?: string;
+  title: string;
+  newTitle: string;
+};
+
+export type BatchRenameArchiveResult = {
+  aid: number;
+  title: string;
+  success: boolean;
+  error?: string;
+  waited?: number;
+};
+
+/**
+ * 批量修改稿件名称，后端串行 + 随机间隔执行以规避风控
+ */
+const batchRenameArchives = async (
+  uid: number,
+  items: BatchRenameArchiveItem[],
+  options?: { minIntervalMs?: number; maxIntervalMs?: number },
+): Promise<{
+  total: number;
+  success: number;
+  failed: number;
+  results: BatchRenameArchiveResult[];
+}> => {
+  const res = await request.post("/bili/batchRenameArchives", {
+    uid,
+    items,
+    options,
+  });
+  return res.data;
+};
+
 const checkTag = async (tag: string, uid: number) => {
   const res = await request.post("/bili/checkTag", {
     tag,
@@ -188,6 +224,7 @@ export const formatWebhookDesc = async (
 const bili = {
   validUploadParams,
   getArchives,
+  batchRenameArchives,
   getReserveList,
   searchStaffUser,
   getStaffRemaining,
