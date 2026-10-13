@@ -141,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import { NTag, NText } from "naive-ui";
+import { NInput, NTag } from "naive-ui";
 
 import Tip from "@renderer/components/Tip.vue";
 import { biliApi } from "@renderer/apis";
@@ -267,7 +267,9 @@ const progressText = computed(() => {
 });
 
 const loadList = async () => {
-  if (!userInfo.value.uid) {
+  // 先取到局部变量：ref 属性访问的收窄不会跨 await 保留
+  const uid = userInfo.value.uid;
+  if (!uid) {
     notice.error({ title: "请先在左侧头像处登录 B 站账号", duration: 2000 });
     return;
   }
@@ -275,7 +277,7 @@ const loadList = async () => {
   try {
     const res = await biliApi.getArchives(
       { pn: 1, ps: 100, status: "is_pubing,pubed,not_pubed" },
-      userInfo.value.uid,
+      uid,
     );
     const list = (res?.arc_audits ?? []).map((item: any) => {
       const archive = item.Archive ?? {};
@@ -422,9 +424,9 @@ const columns = computed(() => [
     width: 100,
     render(row: ArchiveRow) {
       return h(
-        NText,
-        { depth: 3, style: "font-size:12px;" },
-        { default: () => row.bvid || `av${row.aid}` },
+        "span",
+        { style: "font-size:12px;color:var(--text-3,#999);" },
+        row.bvid || `av${row.aid}`,
       );
     },
   },
@@ -467,6 +469,11 @@ const resultColumns = computed(() => [
 
 const run = async () => {
   if (editedCount.value === 0) return;
+  const uid = userInfo.value.uid;
+  if (!uid) {
+    notice.error({ title: "请先在左侧头像处登录 B 站账号", duration: 2000 });
+    return;
+  }
   const targets = rows.value
     .filter((r) => edits.value[r.aid] && edits.value[r.aid] !== r.title)
     .map((r) => ({
@@ -485,7 +492,7 @@ const run = async () => {
   running.value = true;
   results.value = [];
   try {
-    const res = await biliApi.batchRenameArchives(userInfo.value.uid, targets, {
+    const res = await biliApi.batchRenameArchives(uid, targets, {
       minIntervalMs: minIntervalSec.value * 1000,
       maxIntervalMs: Math.max(minIntervalSec.value, maxIntervalSec.value) * 1000,
     });
