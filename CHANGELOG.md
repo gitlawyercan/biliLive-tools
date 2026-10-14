@@ -1,3 +1,22 @@
+# 3.26.4-fix2(2026.10.14) 批量改名列表三项修复 + 单场限时录制单位改为分钟
+
+## 功能
+
+- **「单场时长上限」单位从小时改为分钟**（`packages/types/src/index.ts`、`packages/shared/src/enum.ts`、`packages/shared/src/recorder/config.ts`、`packages/liveManager/src/recorder.ts`、`packages/DouYinRecorder/src/maxDuration.ts`、`http/src/types|routes/recorder.ts`、`Tools/pages/Recorder/components/addModal.vue`）
+  房间配置「单场时长上限」（仅抖音生效）改为直接填分钟整数（如 `90` 表示 1.5 小时），不再需要换算小数。输入框步进 5、只允许整数。
+  字段同步更名 `douyinMaxRecordHours` → `douyinMaxRecordMinutes`。**旧配置自动迁移**：房间已有按小时配置的值会在读取时 ×60 换算成分钟生效；在新 UI 里保存一次后即写入新字段。显式清空或填 0 仍表示不限制。
+
+## 修复
+
+- **「批量改名」稿件列表读取不全**（`Tools/pages/BatchRenameArchive.vue`）
+  B 站投稿列表接口在 `ps > 20` 时会把分页大小钳制为 10（实测请求 100 返回 `page.ps=10`），此前只请求第一页导致列表不全（77 个稿件只显示 10 个）。现改为固定 `ps=20`、按返回的 `page.count` 自动翻页拉全，并保留空页/200 页上限兜底防止死循环。
+
+- **分P数不显示（恒为 0 P）**（同上）
+  该接口返回的 `Videos` 常为空数组、`Archive.videos` 为 `null`，旧逻辑两级取值全部落空。实际分P数在每条记录的 `cid_list` 长度里，取值顺序改为 `Videos.length → cid_list.length → Archive.videos`。
+
+- **状态列显示原始值 "-50"**（同上）
+  B 站接口对「过审仅自己可见」这类状态会把 `state_desc` 原样返回为状态码字符串（`-50`），被直接渲染到列表。现对空值/纯数字的 `state_desc` 使用本地映射（-50 仅自己可见、-40 等待发布、-1/-6/-30/-60 审核中、-4 被打回、0 已通过），悬停提示附带原始 `state` 数值便于排查；状态分组同步把 -50 / -40 归入「已通过」。
+
 # 3.26.4(2026.10.13) 批量修改投稿稿件名称
 
 ## 功能

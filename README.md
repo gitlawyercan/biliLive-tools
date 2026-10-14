@@ -119,6 +119,13 @@ GPLv3
 
 以下为本仓库在原项目基础上自行维护的改动记录（按版本倒序）。Docker 镜像同步发布至 DockerHub 与 GHCR（`ghcr.io/gitlawyercan/bililive-tools`）。
 
+## 3.26.4-fix2（2026-10-14）批量改名三项修复 + 单场限时录制单位改为分钟
+
+- **[fix] 「批量改名」稿件列表读取不全**：B 站投稿列表接口在 `ps > 20` 时会把分页大小钳制为 10，此前只取第一页导致 77 个稿件只显示 10 个。现固定 `ps=20` 按 `page.count` 自动翻页拉全（`Tools/pages/BatchRenameArchive.vue`）。
+- **[fix] 分P数恒为 0 P**：该接口的 `Videos` 常为空数组、`Archive.videos` 为 `null`，实际分P数在 `cid_list` 长度里，取值顺序改为 `Videos → cid_list → Archive.videos`（同上）。
+- **[fix] 状态列显示原始值 "-50"**：B 站接口对「过审仅自己可见」会把 `state_desc` 原样返回为状态码字符串，现对纯数字 desc 使用本地映射（-50 仅自己可见、-40 等待发布等），悬停提示附原始 state；-50/-40 归入「已通过」分组（同上）。
+- **[feat] 「单场时长上限」（仅抖音生效）单位从小时改为分钟**：房间配置直接填分钟整数（如 90 表示 1.5 小时），输入框步进 5、只允许整数。字段同步更名 `douyinMaxRecordHours` → `douyinMaxRecordMinutes`；**旧配置自动迁移**（读取时旧小时值 ×60 生效，保存一次即写入新字段），显式清空或填 0 仍表示不限制（`types`、`shared/src/enum.ts`、`shared/src/recorder/config.ts`、`liveManager`、`DouYinRecorder/src/maxDuration.ts`、`http`、`addModal.vue`）。
+
 ## 3.26.4（2026-10-13）批量修改投稿稿件名称
 
 - **[feat] 新增「批量改名」工具：列表改稿名后串行 + 随机间隔逐个提交，规避风控**（`shared/src/task/bili.ts`、`http/src/routes/bili.ts`、`renderer/src/apis/bili.ts`、`Tools/pages/BatchRenameArchive.vue`）
