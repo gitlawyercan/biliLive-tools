@@ -231,11 +231,30 @@ const resultSummary = computed(() => {
 
 /** state -> 粗粒度分组，与 B 站接口的 status 参数语义对齐 */
 function stateGroup(state: number): string {
-  // 0 = 已通过公开；负值为处理中/未通过
-  if (state === 0) return "pubed";
+  // 0 = 已通过公开；-50 = 过审仅自己可见；-40 = 过审等待发布，均视为已通过
+  if (state === 0 || state === -50 || state === -40) return "pubed";
   // -1 待审、-4 被打回等视为未通过
   if (state === -1 || state === -4 || state === -6) return "not_pubed";
   return "pubing";
+}
+
+/** state -> 友好文案：B 站接口对部分状态会把 state_desc 直接返回为状态码字符串（如 -50） */
+const STATE_LABELS: Record<number, string> = {
+  0: "已通过",
+  [-1]: "审核中",
+  [-4]: "被打回",
+  [-6]: "审核中",
+  [-30]: "审核中",
+  [-40]: "等待发布",
+  [-50]: "仅自己可见",
+  [-60]: "审核中",
+};
+
+function stateText(row: Pick<ArchiveRow, "state" | "stateDesc">): string {
+  const desc = (row.stateDesc ?? "").trim();
+  // desc 为空或纯数字（状态码原样返回）时使用本地映射
+  if (desc && !/^-?\d+$/.test(desc)) return desc;
+  return STATE_LABELS[row.state] ?? desc;
 }
 
 const statusTagType: Record<string, "success" | "warning" | "error" | "default"> = {
@@ -275,24 +294,40 @@ const loadList = async () => {
   }
   loading.value = true;
   try {
-    const res = await biliApi.getArchives(
-      { pn: 1, ps: 100, status: "is_pubing,pubed,not_pubed" },
-      uid,
-    );
-    const list = (res?.arc_audits ?? []).map((item: any) => {
-      const archive = item.Archive ?? {};
-      const videos = Array.isArray(item.Videos) ? item.Videos : [];
-      return {
-        aid: Number(archive.aid),
-        bvid: archive.bvid ?? "",
-        title: archive.title ?? "",
-        // 分P数：优先用 Videos 长度，退化时读 Archive.videos
-        parts: videos.length || (Array.isArray(archive.videos) ? archive.videos.length : 0),
-        state: Number(archive.state ?? 0),
-        stateDesc: archive.state_desc ?? "",
-        cover: archive.cover,
-      } as ArchiveRow;
-    });
+    // B 站接口在 ps > 20 时会把分页大小钳制为 10，且一次只返回一页，
+    // 因此固定 ps=20，按返回的 page.count 翻页拉全，避免稿件列表读取不全
+    const status = "is_pubing,pubed,not_pubed";
+    const list: ArchiveRow[] = [];
+    let pn = 1;
+    let total = Number.POSITIVE_INFINITY;
+    while (list.length < total && pn <= 200) {
+      const res = await biliApi.getArchives({ pn, ps: 20, status }, uid);
+      total = Number(res?.page?.count ?? 0);
+      const pageItems = res?.arc_audits ?? [];
+      if (pageItems.length === 0) break;
+      list.push(
+        ...pageItems.map((item: any): ArchiveRow => {
+          const archive = item.Archive ?? {};
+          const videos = Array.isArray(item.Videos) ? item.Videos : [];
+          return {
+            aid: Number(archive.aid),
+            bvid: archive.bvid ?? "",
+            title: archive.title ?? "",
+            // 分P数：接口的 Videos 常为空数组、Archive.videos 为 null，
+            // 真实分P数在 item.cid_list 长度里，逐级退化
+            parts:
+              videos.length ||
+              (Array.isArray(item.cid_list) ? item.cid_list.length : 0) ||
+              (Array.isArray(archive.videos) ? archive.videos.length : 0) ||
+              0,
+            state: Number(archive.state ?? 0),
+            stateDesc: archive.state_desc ?? "",
+            cover: archive.cover,
+          };
+        }),
+      );
+      pn++;
+    }
     rows.value = list;
     // 清掉已不存在稿件的编辑记录
     const aids = new Set(list.map((r) => r.aid));
@@ -412,9 +447,9 @@ const columns = computed(() => [
           size: "small",
           type: statusTagType[group] ?? "default",
           bordered: false,
-          title: row.stateDesc,
+          title: `${stateText(row)}（state=${row.state}）`,
         },
-        { default: () => row.stateDesc || group },
+        { default: () => stateText(row) || group },
       );
     },
   },
