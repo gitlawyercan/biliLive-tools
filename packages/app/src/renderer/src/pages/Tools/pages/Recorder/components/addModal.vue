@@ -134,14 +134,14 @@
               <template #label>
                 <Tip
                   text="单场时长上限"
-                  tip="本场直播最长录制时长，单位小时，支持小数（如 1.5）。<br/>录满后自动停止本场录制，下一场直播重新计算。<br/>留空或填 0 表示不限制。<br/><b>当前仅抖音平台生效</b>"
+                  tip="本场直播最长录制时长，单位分钟（如 90 表示 1.5 小时）。<br/>录满后自动停止本场录制，下一场直播重新计算。<br/>留空或填 0 表示不限制。<br/><b>当前仅抖音平台生效</b>"
                 ></Tip>
               </template>
               <n-input-number
-                v-model:value="config.douyinMaxRecordHours"
+                v-model:value="config.douyinMaxRecordMinutes"
                 :min="0"
-                :step="0.5"
-                :precision="2"
+                :step="5"
+                :precision="0"
                 placeholder="不限制"
                 clearable
                 style="width: 180px"
@@ -923,7 +923,7 @@ const globalFieldsObj = ref<Record<NonNullable<Recorder["noGlobalFollowFields"]>
     debugLevel: true,
     api: true,
     // 抖音单场录制时长上限：固定为「独立字段」，即始终按房间自己的值走
-    douyinMaxRecordHours: false,
+    douyinMaxRecordMinutes: false,
   },
 );
 
@@ -1055,7 +1055,7 @@ const initGlobalFields = () => {
     api: !(config.value?.noGlobalFollowFields ?? []).includes("api"),
     // 不做「跟随全局」推断：对新老房间都固定视为独立字段，
     // 避免存量配置缺这个键时被误判成跟随全局。
-    douyinMaxRecordHours: false,
+    douyinMaxRecordMinutes: false,
   };
 };
 

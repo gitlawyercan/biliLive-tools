@@ -898,6 +898,6 @@ export const defaultRecordConfig: Omit<Recorder, "id"> = {
   handleTime: [null, null],
   debugLevel: "none",
   api: "web",
-  // 抖音单场录制时长上限（小时），0 表示不限制
-  douyinMaxRecordHours: 0,
+  // 抖音单场录制时长上限（分钟），0 表示不限制
+  douyinMaxRecordMinutes: 0,
 };

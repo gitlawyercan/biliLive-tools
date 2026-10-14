@@ -132,7 +132,7 @@ export type UpdateRecorderArgs = Pick<
   | "weight"
   | "debugLevel"
   | "api"
-  | "douyinMaxRecordHours"
+  | "douyinMaxRecordMinutes"
 >;
 export type UpdateRecorderResp = ClientRecorder;
 

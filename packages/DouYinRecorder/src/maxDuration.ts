@@ -1,7 +1,7 @@
 /**
  * 抖音单场录制时长上限
  *
- * 需求：为每个抖音直播间单独设置「每场直播最多录多少小时」。
+ * 需求：为每个抖音直播间单独设置「每场直播最多录多少分钟」。
  *
  * 设计要点：
  * 1. 额度按「实际录制时长」累计，断流、重连的空闲时间不计入。
@@ -66,7 +66,8 @@ const lastProbeAt = new Map<string, number>();
 
 type QuotaRecorder = {
   id: string;
-  douyinMaxRecordHours?: number;
+  /** 抖音单场录制时长上限，单位分钟，0 表示不限制 */
+  douyinMaxRecordMinutes?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -157,11 +158,11 @@ function removePersisted(recorderId: string): void {
   if (persisted.delete(recorderId)) writeStore();
 }
 
-/** 把限制配置的「小时」换算成毫秒上限；小于等于 0 或非法值表示不限制 */
+/** 把限制配置的「分钟」换算成毫秒上限；小于等于 0 或非法值表示不限制 */
 export function getLimitMs(recorder: QuotaRecorder): number {
-  const hours = Number(recorder.douyinMaxRecordHours);
-  if (!Number.isFinite(hours) || hours <= 0) return 0;
-  return hours * 60 * 60 * 1000;
+  const minutes = Number(recorder.douyinMaxRecordMinutes);
+  if (!Number.isFinite(minutes) || minutes <= 0) return 0;
+  return minutes * 60 * 1000;
 }
 
 function clearTimer(state: QuotaState): void {

@@ -230,9 +230,16 @@ export default class RecorderConfig {
       saveCover: getValue("saveCover") ?? false,
       convert2Mp4: getValue("convert2Mp4") ?? false,
       segment: getValue("segment") ?? 90,
-      // 抖音单场录制时长上限（小时）。该字段在 noGlobalFollowFields 中，
+      // 抖音单场录制时长上限（分钟）。该字段在 noGlobalFollowFields 中，
       // 因此 getValue 会返回本房间自己的值；未配置时兜底为 0（不限制）。
-      douyinMaxRecordHours: getValue("douyinMaxRecordHours") ?? 0,
+      // 兼容旧版按「小时」存储的 douyinMaxRecordHours：仅在新字段不存在时
+      // 读旧值 ×60 自动迁移；显式保存的 null/0 表示不限制，不做迁移。
+      douyinMaxRecordMinutes: (() => {
+        const value = getValue("douyinMaxRecordMinutes");
+        if (value !== undefined && value !== null) return Number(value) || 0;
+        const legacyHours = Number(getValue("douyinMaxRecordHours"));
+        return Number.isFinite(legacyHours) && legacyHours > 0 ? legacyHours * 60 : 0;
+      })(),
       uid: uid,
       qualityRetry: getValue("qualityRetry") ?? 0,
       videoFormat: getValue("videoFormat") ?? "auto",
